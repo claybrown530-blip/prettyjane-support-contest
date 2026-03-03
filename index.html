@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Pretty Jane • Local Support Contest</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <main class="wrap">
+    <header class="hero">
+      <div class="hero-top">
+        <div class="brand">
+          <h1><span class="pj">pretty</span><span class="jane">JANE</span></h1>
+          <p class="tag">Local Support Contest • Vote who opens the show</p>
+        </div>
+        <div class="badge">KissYourFriends. 💋</div>
+      </div>
+
+      <div class="hero-card">
+        <div class="hero-copy">
+          <h2>Pick the local opener.</h2>
+          <p>
+            Vote once. Share it. Rally your city. Once a band hits <strong>10 votes</strong>,
+            they appear on the live leaderboard.
+          </p>
+          <p class="tiny">
+            Starter candidates are preloaded so cities have something to chase. Real votes only.
+          </p>
+        </div>
+      </div>
+    </header>
+
+    <section class="grid">
+      <section class="card">
+        <h3>Vote</h3>
+        <form id="voteForm">
+          <label>Your name
+            <input name="voterName" required />
+          </label>
+
+          <label>Your email
+            <input name="voterEmail" type="email" required />
+          </label>
+
+          <label>Are you an individual or a band?
+            <div class="row">
+              <label class="radio"><input type="radio" name="voterType" value="individual" checked /> Individual</label>
+              <label class="radio"><input type="radio" name="voterType" value="band" /> Band</label>
+            </div>
+          </label>
+
+          <label id="bandEmailWrap" class="hidden">Band contact email (if you picked “Band”)
+            <input name="bandContactEmail" type="email" placeholder="band@email.com" />
+          </label>
+
+          <label>City
+            <select name="city" id="citySelect" required></select>
+          </label>
+
+          <label>Suggest a band / artist
+            <input name="bandName" id="bandName" required placeholder="Type a band name…" />
+          </label>
+
+          <label>Phone (optional)
+            <input name="voterPhone" placeholder="(xxx) xxx-xxxx" />
+          </label>
+
+          <button class="btn" type="submit">Submit vote</button>
+        </form>
+
+        <div id="toast" class="toast hidden"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h3>Live leaderboard</h3>
+          <div class="pill">Updates every 10s</div>
+        </div>
+
+        <div class="leaderboard">
+          <canvas id="chart" height="140"></canvas>
+          <div id="topList" class="toplist"></div>
+        </div>
+
+        <div class="subcard">
+          <h4>Starter candidates</h4>
+          <div id="seedList" class="seedlist"></div>
+        </div>
+      </section>
+    </section>
+
+    <footer class="footer">
+      <p>Made for the tour. Built to be loud.</p>
+    </footer>
+  </main>
+
+  <script src="./app.js"></script>
+</body>
+</html>
