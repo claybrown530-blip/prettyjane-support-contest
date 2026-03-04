@@ -132,3 +132,108 @@ input:focus,select:focus{border-color:rgba(43,66,137,.55);box-shadow:0 0 0 4px r
   color: var(--muted);
   opacity:.85;
 }
+
+/* ===== Layout polish + dopamine UI ===== */
+
+/* Put badge across from pretty JANE, even on mobile */
+.compactTop{
+  flex-wrap:wrap;
+  align-items:center;
+}
+
+/* Remove the old mobile rule that stacked hero-top; keep it row-ish */
+@media (max-width: 520px){
+  .hero-top{flex-direction:row; align-items:center}
+}
+
+/* Grid areas: leaderboard first on mobile */
+.grid-areas{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-areas: "vote board";
+  gap:18px;
+}
+.voteCard{grid-area: vote;}
+.boardCard{grid-area: board;}
+
+@media (max-width: 900px){
+  .grid-areas{
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "board"
+      "vote";
+  }
+}
+
+/* City select styling inside leaderboard */
+.citySelect{
+  margin-left:6px;
+  padding:8px 10px;
+  border-radius:12px;
+  border:1px solid var(--line);
+  background:#fff;
+  font-size:14px;
+  max-width: 220px;
+}
+
+/* Subcard head + write-in microcopy */
+.subcardHead{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  margin-bottom:10px;
+}
+.writein{
+  font-size:13px;
+  color: var(--muted);
+}
+
+/* Loading label */
+.loadState{
+  margin-left:8px;
+  font-size:12px;
+  color: var(--muted);
+  opacity:.85;
+}
+
+/* Confetti */
+.confetti{
+  position:fixed;
+  top:-10px;
+  width:10px;
+  height:14px;
+  border-radius:3px;
+  pointer-events:none;
+  z-index:9999;
+  animation: confettiFall 900ms linear forwards;
+}
+@keyframes confettiFall{
+  to { transform: translateY(110vh) rotate(360deg); opacity: 0.95; }
+}
+
+/* After-vote share button */
+.toast .shareRow{
+  display:flex;
+  gap:10px;
+  margin-top:10px;
+  align-items:center;
+  flex-wrap:wrap;
+}
+.toast .shareBtn{
+  border:1px solid rgba(43,66,137,.35);
+  background:#fff;
+  color: var(--blue);
+  font-weight:800;
+  padding:10px 12px;
+  border-radius:12px;
+  cursor:pointer;
+}
+.toast .shareBtn:active{transform: translateY(1px)}
+.toast .mini{
+  font-size:12px;
+  color: var(--muted);
+}
+
+/* Keep seed pills tappable */
+.seedpill{cursor:pointer}
+

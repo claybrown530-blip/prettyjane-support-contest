@@ -4,7 +4,7 @@ let chart;
 
 // Cache per city: { [city]: { ts: number, data: object } }
 const cache = {};
-const CACHE_TTL_MS = 15000; // 15s - feels live, avoids hammering network
+const CACHE_TTL_MS = 15000;
 
 const cityStops = [
   "Durango, CO",
@@ -18,29 +18,50 @@ const cityStops = [
 const form = document.getElementById("voteForm");
 const toast = document.getElementById("toast");
 const citySelect = document.getElementById("citySelect");
+const citySelectBoard = document.getElementById("citySelectBoard");
 const seedList = document.getElementById("seedList");
 const topList = document.getElementById("topList");
 const bandEmailWrap = document.getElementById("bandEmailWrap");
 const loadState = document.getElementById("loadState");
-
-function showToast(msg){
-  toast.textContent = msg;
-  toast.classList.remove("hidden");
-  setTimeout(()=>toast.classList.add("hidden"), 8000);
-}
+const voteCard = document.getElementById("voteCard");
 
 function setLoading(isLoading){
   if (!loadState) return;
   loadState.textContent = isLoading ? "Loading…" : "";
 }
 
-function buildCitySelect(){
-  cityStops.forEach(c=>{
-    const opt = document.createElement("option");
-    opt.value = c;
-    opt.textContent = c;
-    citySelect.appendChild(opt);
-  });
+function showToastHTML(html){
+  toast.innerHTML = html;
+  toast.classList.remove("hidden");
+  setTimeout(()=>toast.classList.add("hidden"), 12000);
+}
+
+function confettiBurst(){
+  const colors = ["#2B4289", "#E11D48", "#111827", "#F59E0B"];
+  const count = 24;
+  for (let i=0; i<count; i++){
+    const d = document.createElement("div");
+    d.className = "confetti";
+    d.style.left = Math.random()*100 + "vw";
+    d.style.background = colors[Math.floor(Math.random()*colors.length)];
+    d.style.transform = `translateY(0) rotate(${Math.random()*180}deg)`;
+    d.style.animationDuration = (700 + Math.random()*500) + "ms";
+    document.body.appendChild(d);
+    setTimeout(()=>d.remove(), 1400);
+  }
+}
+
+function setBandNameAndScroll(name){
+  const bandInput = document.getElementById("bandName");
+  bandInput.value = name;
+  bandInput.focus({ preventScroll: true });
+  voteCard.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function copyShareLink(city){
+  const url = new URL(window.location.href);
+  url.searchParams.set("city", city);
+  return navigator.clipboard.writeText(url.toString());
 }
 
 function getVoterType(){
@@ -56,9 +77,7 @@ form.addEventListener("change", ()=>{
 async function fetchCity(city){
   const res = await fetch(`${API}?city=${encodeURIComponent(city)}`, { cache: "no-store" });
   const data = await res.json().catch(()=> ({}));
-  if (!res.ok || !data.ok) {
-    throw new Error(data.error || `Backend error (status ${res.status})`);
-  }
+  if (!res.ok || !data.ok) throw new Error(data.error || `Backend error (status ${res.status})`);
   cache[city] = { ts: Date.now(), data };
   return data;
 }
@@ -70,20 +89,23 @@ function computeLeaderboard(data){
   return entries;
 }
 
-function renderSeedCandidates(data){
+function renderSeedCandidates(data, city){
   seedList.innerHTML = "";
   const seeds = (data.seeds || []).map(b=>b.name);
+
   if (!seeds.length){
     seedList.textContent = "No starter candidates yet.";
     return;
   }
+
   seeds.forEach(n=>{
     const pill = document.createElement("div");
     pill.className = "seedpill";
     pill.textContent = n;
     pill.onclick = ()=> {
-      document.getElementById("bandName").value = n;
-      document.getElementById("bandName").focus();
+      // sync city + fill band name
+      setCity(city);
+      setBandNameAndScroll(n);
     };
     seedList.appendChild(pill);
   });
@@ -99,6 +121,7 @@ function renderTopList(entries){
     const row = document.createElement("div");
     row.className = "topitem";
     row.innerHTML = `<strong>${i+1}. ${e.name}</strong><span>${e.count} vote${e.count===1?"":"s"}</span>`;
+    row.onclick = ()=> setBandNameAndScroll(e.name);
     topList.appendChild(row);
   });
 }
@@ -127,46 +150,68 @@ function renderChart(entries){
 }
 
 function renderCity(city, data){
-  const ac = document.getElementById("activeCity");
-  if (ac) ac.firstChild ? null : null;
-  // keep your existing city label behavior
-  const acEl = document.getElementById("activeCity");
-  if (acEl) acEl.childNodes[0].textContent = `City: ${city} `;
+  // Keep dropdowns aligned
+  if (citySelect.value !== city) citySelect.value = city;
+  if (citySelectBoard.value !== city) citySelectBoard.value = city;
+
   const entries = computeLeaderboard(data);
-  renderSeedCandidates(data);
   renderTopList(entries);
   renderChart(entries);
+  renderSeedCandidates(data, city);
 }
 
 async function refresh(force=false){
-  const city = citySelect.value;
+  const city = citySelectBoard.value || citySelect.value;
 
-  // 1) Instant render from cache if present
+  // Instant render from cache if present
   const cached = cache[city];
   const fresh = cached && (Date.now() - cached.ts) < CACHE_TTL_MS;
 
-  if (cached) {
-    renderCity(city, cached.data);
-  }
+  if (cached) renderCity(city, cached.data);
 
-  // 2) Only fetch if forced or cache is stale/missing
-  if (!fresh || force) {
-    try {
+  if (!fresh || force){
+    try{
       setLoading(true);
       const data = await fetchCity(city);
       renderCity(city, data);
-    } catch (err) {
-      showToast(err.message);
-    } finally {
+    }catch(err){
+      showToastHTML(`<strong>${err.message}</strong>`);
+    }finally{
       setLoading(false);
     }
   }
 }
 
-// When user changes city: render instantly, then refresh in background
-citySelect.addEventListener("change", () => {
+function setCity(city){
+  citySelect.value = city;
+  citySelectBoard.value = city;
+
+  // Update URL for shareability
+  const url = new URL(window.location.href);
+  url.searchParams.set("city", city);
+  window.history.replaceState({}, "", url.toString());
+
   refresh(false);
-});
+}
+
+// Build both city selects
+function buildCitySelects(){
+  cityStops.forEach(c=>{
+    const opt1 = document.createElement("option");
+    opt1.value = c;
+    opt1.textContent = c;
+    citySelect.appendChild(opt1);
+
+    const opt2 = document.createElement("option");
+    opt2.value = c;
+    opt2.textContent = c;
+    citySelectBoard.appendChild(opt2);
+  });
+}
+
+// Sync city changes either direction
+citySelectBoard.addEventListener("change", () => setCity(citySelectBoard.value));
+citySelect.addEventListener("change", () => setCity(citySelect.value));
 
 form.addEventListener("submit", async (e)=>{
   e.preventDefault();
@@ -190,21 +235,58 @@ form.addEventListener("submit", async (e)=>{
 
   const out = await res.json().catch(()=> ({}));
   if (!res.ok || !out.ok){
-    showToast(out.error || `Vote failed (status ${res.status})`);
+    showToastHTML(`<strong>${out.error || `Vote failed (status ${res.status})`}</strong>`);
     return;
   }
 
-  showToast(out.message);
+  confettiBurst();
 
-  // Force refresh this city so counts update immediately
+  const count = out.count || 1;
+  const progress = count < THRESHOLD
+    ? `<div class="mini">${count}/${THRESHOLD} votes to hit the leaderboard.</div>`
+    : `<div class="mini">🎉 ${out.bandName} is on the leaderboard.</div>`;
+
+  showToastHTML(`
+    <strong>${out.message}</strong>
+    ${progress}
+    <div class="shareRow">
+      <button class="shareBtn" id="shareBtn">Copy share link</button>
+      <div class="mini">Send it to your group chat.</div>
+    </div>
+  `);
+
+  const shareBtn = document.getElementById("shareBtn");
+  if (shareBtn){
+    shareBtn.onclick = async () => {
+      try{
+        await copyShareLink(out.city);
+        shareBtn.textContent = "Copied ✅";
+        setTimeout(()=>shareBtn.textContent="Copy share link", 2500);
+      }catch{
+        shareBtn.textContent = "Copy failed";
+        setTimeout(()=>shareBtn.textContent="Copy share link", 2500);
+      }
+    };
+  }
+
+  // Force refresh so counts update immediately
   await refresh(true);
 
   form.reset();
   bandEmailWrap.classList.add("hidden");
 });
 
-buildCitySelect();
-refresh(true);
+// Initialize
+buildCitySelects();
 
-// poll selected city every 12s (slightly slower, less jitter)
+// Load city from URL param if present
+const params = new URLSearchParams(window.location.search);
+const cityParam = params.get("city");
+if (cityParam && cityStops.includes(cityParam)){
+  setCity(cityParam);
+} else {
+  setCity(cityStops[0]);
+}
+
+// Poll selected city (light)
 setInterval(()=>refresh(false), 12000);

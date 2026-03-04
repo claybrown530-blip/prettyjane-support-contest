@@ -10,10 +10,9 @@
 <body>
   <main class="wrap">
     <header class="hero">
-      <div class="hero-top">
+      <div class="hero-top compactTop">
         <div class="brand">
           <h1><span class="pj">pretty</span><span class="jane">JANE</span></h1>
-          <p class="tag">Local Support Contest • Vote who opens the show</p>
         </div>
         <div class="badge">KissYourFriends. 💋</div>
       </div>
@@ -22,18 +21,47 @@
         <div class="hero-copy">
           <h2>Pick the local opener.</h2>
           <p>
-            Vote once. Share it. Rally your city. Once a band hits <strong>10 votes</strong>,
+            <strong>Vote.</strong> Share it. Rally your city. Once a band hits <strong>10 votes</strong>,
             they appear on the live leaderboard.
           </p>
           <p class="tiny">
-            Starter candidates are preloaded so cities have something to chase. Real votes only.
+            <strong>Write-ins welcome.</strong> Your vote creates the leaderboard. Real votes only.
           </p>
         </div>
       </div>
     </header>
 
-    <section class="grid">
-      <section class="card">
+    <section class="grid grid-areas">
+      <!-- Leaderboard FIRST (especially on mobile) -->
+      <section class="card boardCard">
+        <div class="card-head">
+          <div>
+            <h3>Live leaderboard</h3>
+            <div class="activeCity">
+              City:
+              <select id="citySelectBoard" class="citySelect"></select>
+              <span id="loadState" class="loadState"></span>
+            </div>
+          </div>
+          <div class="pill">Updates live</div>
+        </div>
+
+        <div class="leaderboard">
+          <canvas id="chart" height="140"></canvas>
+          <div id="topList" class="toplist"></div>
+        </div>
+
+        <div class="subcard">
+          <div class="subcardHead">
+            <h4>Starter candidates</h4>
+            <div class="writein">Don’t see your band? <strong>Write it in</strong> — it counts instantly.</div>
+          </div>
+          <div id="seedList" class="seedlist"></div>
+        </div>
+      </section>
+
+      <!-- Vote form SECOND on mobile -->
+      <section class="card voteCard" id="voteCard">
         <h3>Vote</h3>
         <form id="voteForm">
           <label>Your name
@@ -63,7 +91,7 @@
           </label>
 
           <label>City
-            <select name="city" id="citySelect" required></select>
+            <select name="city" id="citySelect" required class="citySelect"></select>
           </label>
 
           <label>Suggest a band / artist
@@ -78,26 +106,6 @@
         </form>
 
         <div id="toast" class="toast hidden"></div>
-      </section>
-
-      <section class="card">
-        <div class="card-head">
-          <div>
-            <h3>Live leaderboard</h3>
-            <div id="activeCity" class="activeCity">City: — <span id="loadState" class="loadState"></span></div>
-          </div>
-          <div class="pill">Updates every 10s</div>
-        </div>
-
-        <div class="leaderboard">
-          <canvas id="chart" height="140"></canvas>
-          <div id="topList" class="toplist"></div>
-        </div>
-
-        <div class="subcard">
-          <h4>Starter candidates</h4>
-          <div id="seedList" class="seedlist"></div>
-        </div>
       </section>
     </section>
 
