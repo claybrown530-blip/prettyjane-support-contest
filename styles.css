@@ -237,3 +237,15 @@ input:focus,select:focus{border-color:rgba(43,66,137,.55);box-shadow:0 0 0 4px r
 /* Keep seed pills tappable */
 .seedpill{cursor:pointer}
 
+
+/* Mobile header: logo left, badge right (same row) */
+@media (max-width: 520px){
+  .compactTop{
+    display:grid;
+    grid-template-columns: 1fr auto;
+    align-items:center;
+    gap:12px;
+  }
+  .compactTop .brand{justify-self:start}
+  .compactTop .badge{justify-self:end}
+}
