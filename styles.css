@@ -45,3 +45,28 @@ input:focus,select:focus{border-color:rgba(43,66,137,.55);box-shadow:0 0 0 4px r
 .seedlist{display:flex;flex-wrap:wrap;gap:8px}
 .seedpill{border:1px solid var(--line);background:rgba(0,0,0,.03);padding:8px 10px;border-radius:999px;font-size:13px;cursor:pointer}
 .footer{margin-top:22px;text-align:center;color:var(--muted);font-size:13px}
+
+/* --- Mobile fixes --- */
+@media (max-width: 520px){
+  .wrap{padding:18px}
+  .hero-top{flex-direction:column; align-items:flex-start}
+  .badge{align-self:flex-start}
+  .row{flex-direction:column; align-items:stretch}
+  .radio{
+    width:100%;
+    justify-content:flex-start;
+    border-radius:14px;
+  }
+  .radio input{transform:scale(1.1)}
+}
+
+/* Make radio label not blow up spacing */
+.radio{
+  min-height:44px;
+}
+
+.activeCity{
+  margin-top:4px;
+  font-size:13px;
+  color: var(--muted);
+}

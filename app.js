@@ -113,6 +113,8 @@ function renderChart(entries){
 
 async function refresh(){
   const city = citySelect.value;
+  const ac = document.getElementById("activeCity");
+  if (ac) ac.textContent = `City: ${city}`;
   const data = await fetchData(city);
   const entries = computeLeaderboard(data);
   renderSeedCandidates(data);
