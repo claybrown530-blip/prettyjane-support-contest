@@ -249,3 +249,12 @@ input:focus,select:focus{border-color:rgba(43,66,137,.55);box-shadow:0 0 0 4px r
   .compactTop .brand{justify-self:start}
   .compactTop .badge{justify-self:end}
 }
+
+.consent{
+  margin-top:10px;
+  font-size:12px;
+  color: var(--muted);
+  line-height:1.35;
+  text-align:center;
+}
+
