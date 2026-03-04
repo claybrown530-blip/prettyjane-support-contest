@@ -70,3 +70,58 @@ input:focus,select:focus{border-color:rgba(43,66,137,.55);box-shadow:0 0 0 4px r
   font-size:13px;
   color: var(--muted);
 }
+
+/* --- Cleaner Individual/Band toggle (mobile-safe) --- */
+.field{margin-top:10px}
+.fieldLabel{
+  font-size:13px;
+  color: var(--muted);
+  margin:10px 0 6px;
+}
+
+.toggleRow{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap:12px;
+}
+
+.toggle{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  padding:12px 10px;
+  border-radius:14px;
+  border:1px solid var(--line);
+  background: rgba(0,0,0,.03);
+  cursor:pointer;
+  user-select:none;
+  min-height:44px;
+}
+
+/* hide default radio and make the whole button clickable */
+.toggle input{
+  position:absolute;
+  opacity:0;
+  pointer-events:none;
+}
+
+.toggle span{
+  font-size:15px;
+  color: var(--ink);
+  font-weight:700;
+}
+
+/* selected state */
+.toggle:has(input:checked){
+  border-color: rgba(43,66,137,.55);
+  background: rgba(43,66,137,.10);
+  box-shadow: 0 0 0 4px rgba(43,66,137,.10);
+}
+
+/* Mobile spacing */
+@media (max-width: 520px){
+  .toggleRow{gap:10px}
+  .toggle{padding:12px 10px}
+}
+

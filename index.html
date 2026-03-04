@@ -44,12 +44,19 @@
             <input name="voterEmail" type="email" required />
           </label>
 
-          <label>Are you an individual or a band?
-            <div class="row">
-              <label class="radio"><input type="radio" name="voterType" value="individual" checked /> Individual</label>
-              <label class="radio"><input type="radio" name="voterType" value="band" /> Band</label>
+          <div class="field">
+            <div class="fieldLabel">Are you an individual or a band?</div>
+            <div class="toggleRow">
+              <label class="toggle">
+                <input type="radio" name="voterType" value="individual" checked />
+                <span>Individual</span>
+              </label>
+              <label class="toggle">
+                <input type="radio" name="voterType" value="band" />
+                <span>Band</span>
+              </label>
             </div>
-          </label>
+          </div>
 
           <label id="bandEmailWrap" class="hidden">Band contact email (if you picked “Band”)
             <input name="bandContactEmail" type="email" placeholder="band@email.com" />
