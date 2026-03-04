@@ -2,6 +2,10 @@ const API = "/.netlify/functions/vote";
 const THRESHOLD = 10;
 let chart;
 
+// Cache per city: { [city]: { ts: number, data: object } }
+const cache = {};
+const CACHE_TTL_MS = 15000; // 15s - feels live, avoids hammering network
+
 const cityStops = [
   "Durango, CO",
   "Spokane, WA",
@@ -17,11 +21,17 @@ const citySelect = document.getElementById("citySelect");
 const seedList = document.getElementById("seedList");
 const topList = document.getElementById("topList");
 const bandEmailWrap = document.getElementById("bandEmailWrap");
+const loadState = document.getElementById("loadState");
 
 function showToast(msg){
   toast.textContent = msg;
   toast.classList.remove("hidden");
   setTimeout(()=>toast.classList.add("hidden"), 8000);
+}
+
+function setLoading(isLoading){
+  if (!loadState) return;
+  loadState.textContent = isLoading ? "Loading…" : "";
 }
 
 function buildCitySelect(){
@@ -43,9 +53,14 @@ form.addEventListener("change", ()=>{
   bandEmailWrap.classList.toggle("hidden", vt !== "band");
 });
 
-async function fetchData(city){
-  const res = await fetch(`${API}?city=${encodeURIComponent(city)}`);
-  return await res.json();
+async function fetchCity(city){
+  const res = await fetch(`${API}?city=${encodeURIComponent(city)}`, { cache: "no-store" });
+  const data = await res.json().catch(()=> ({}));
+  if (!res.ok || !data.ok) {
+    throw new Error(data.error || `Backend error (status ${res.status})`);
+  }
+  cache[city] = { ts: Date.now(), data };
+  return data;
 }
 
 function computeLeaderboard(data){
@@ -111,16 +126,47 @@ function renderChart(entries){
   }
 }
 
-async function refresh(){
-  const city = citySelect.value;
+function renderCity(city, data){
   const ac = document.getElementById("activeCity");
-  if (ac) ac.textContent = `City: ${city}`;
-  const data = await fetchData(city);
+  if (ac) ac.firstChild ? null : null;
+  // keep your existing city label behavior
+  const acEl = document.getElementById("activeCity");
+  if (acEl) acEl.childNodes[0].textContent = `City: ${city} `;
   const entries = computeLeaderboard(data);
   renderSeedCandidates(data);
   renderTopList(entries);
   renderChart(entries);
 }
+
+async function refresh(force=false){
+  const city = citySelect.value;
+
+  // 1) Instant render from cache if present
+  const cached = cache[city];
+  const fresh = cached && (Date.now() - cached.ts) < CACHE_TTL_MS;
+
+  if (cached) {
+    renderCity(city, cached.data);
+  }
+
+  // 2) Only fetch if forced or cache is stale/missing
+  if (!fresh || force) {
+    try {
+      setLoading(true);
+      const data = await fetchCity(city);
+      renderCity(city, data);
+    } catch (err) {
+      showToast(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+}
+
+// When user changes city: render instantly, then refresh in background
+citySelect.addEventListener("change", () => {
+  refresh(false);
+});
 
 form.addEventListener("submit", async (e)=>{
   e.preventDefault();
@@ -142,18 +188,23 @@ form.addEventListener("submit", async (e)=>{
     body: JSON.stringify(payload),
   });
 
-  const out = await res.json();
-  if (!out.ok){
-    showToast(out.error || "Something went wrong.");
+  const out = await res.json().catch(()=> ({}));
+  if (!res.ok || !out.ok){
+    showToast(out.error || `Vote failed (status ${res.status})`);
     return;
   }
 
   showToast(out.message);
-  await refresh();
+
+  // Force refresh this city so counts update immediately
+  await refresh(true);
+
   form.reset();
   bandEmailWrap.classList.add("hidden");
 });
 
 buildCitySelect();
-refresh();
-setInterval(refresh, 10000);
+refresh(true);
+
+// poll selected city every 12s (slightly slower, less jitter)
+setInterval(()=>refresh(false), 12000);
