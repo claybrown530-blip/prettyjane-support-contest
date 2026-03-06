@@ -34,7 +34,6 @@ exports.handler = async (event) => {
     const city = (event.queryStringParameters?.city || "").trim();
     if (!city) return json(400, { error: "Missing city" });
 
-    // get seed candidates
     const { data: seeds, error: seedErr } = await supabase
       .from("bands")
       .select("city,name")
@@ -42,7 +41,6 @@ exports.handler = async (event) => {
 
     if (seedErr) return json(500, { error: seedErr.message });
 
-    // get votes for that city
     const { data: votes, error: voteErr } = await supabase
       .from("votes")
       .select("band_name")
@@ -69,7 +67,9 @@ exports.handler = async (event) => {
     }
 
     const city = (payload.city || "").trim();
-    const bandName = normalizeBandName(payload.bandName);
+    let bandName = normalizeBandName(payload.bandName);
+    const normalizedInput = bandName.toLowerCase();
+
     const voterName = (payload.voterName || "").trim();
     const voterEmail = (payload.voterEmail || "").trim().toLowerCase();
     const voterPhone = (payload.voterPhone || "").trim();
@@ -81,6 +81,49 @@ exports.handler = async (event) => {
     }
     if (!["individual", "band"].includes(voterType)) {
       return json(400, { error: "voterType must be individual or band" });
+    }
+
+    // 1) Match against official starter candidates in this city
+    const { data: officialBands } = await supabase
+      .from("bands")
+      .select("name")
+      .eq("city", city);
+
+    const officialMatch = (officialBands || []).find(
+      (b) => normalizeBandName(b.name).toLowerCase() === normalizedInput
+    );
+    if (officialMatch) {
+      bandName = officialMatch.name;
+    }
+
+    // 2) Match against alias table
+    if (!officialMatch) {
+      const { data: aliases } = await supabase
+        .from("band_aliases")
+        .select("alias, canonical_name")
+        .eq("city", city);
+
+      const aliasMatch = (aliases || []).find(
+        (a) => normalizeBandName(a.alias).toLowerCase() === normalizedInput
+      );
+      if (aliasMatch) {
+        bandName = aliasMatch.canonical_name;
+      }
+    }
+
+    // 3) Match against existing votes in this city so case variations collapse
+    if (!officialMatch) {
+      const { data: existingVotes } = await supabase
+        .from("votes")
+        .select("band_name")
+        .eq("city", city);
+
+      const existingMatch = (existingVotes || []).find(
+        (v) => normalizeBandName(v.band_name).toLowerCase() === normalizedInput
+      );
+      if (existingMatch) {
+        bandName = existingMatch.band_name;
+      }
     }
 
     const { error: insErr } = await supabase.from("votes").insert([{
@@ -95,7 +138,6 @@ exports.handler = async (event) => {
 
     if (insErr) return json(500, { error: insErr.message });
 
-    // recount band votes for this city
     const { data: bandVotes, error: countErr } = await supabase
       .from("votes")
       .select("id")
