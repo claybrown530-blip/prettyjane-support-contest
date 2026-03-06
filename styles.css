@@ -258,3 +258,22 @@ input:focus,select:focus{border-color:rgba(43,66,137,.55);box-shadow:0 0 0 4px r
   text-align:center;
 }
 
+
+/* Ticket link */
+.ticketLink{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:10px 14px;
+  border-radius:999px;
+  border:1px solid rgba(0,0,0,0.08);
+  background:#fff;
+  color:var(--ink);
+  text-decoration:none;
+  font-weight:700;
+  font-size:14px;
+  line-height:1;
+  white-space:nowrap;
+}
+.ticketLink:active{ transform: translateY(1px); }
+
