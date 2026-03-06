@@ -277,3 +277,33 @@ input:focus,select:focus{border-color:rgba(43,66,137,.55);box-shadow:0 0 0 4px r
 }
 .ticketLink:active{ transform: translateY(1px); }
 
+
+/* --- Mobile/iframe safety: prevent horizontal overflow + weird zoom feel --- */
+html, body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+img, canvas, svg, video {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Make the main page wrapper never exceed viewport width */
+.page, .container, .wrap, main {
+  max-width: 100%;
+}
+
+/* 320px breakpoint cleanup */
+@media (max-width: 360px) {
+  .header {
+    gap: 10px;
+  }
+  .header .badge, .badge {
+    font-size: 12px;
+    padding: 8px 10px;
+    white-space: nowrap;
+  }
+}
+
