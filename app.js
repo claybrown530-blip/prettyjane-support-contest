@@ -7,9 +7,9 @@ const cache = {};
 const CACHE_TTL_MS = 15000;
 
 const cityStops = [
-  "Durango, CO",
   "Santa Fe, NM",
   "OKC, OK",
+  "Durango, CO",
   "Spokane, WA",
   "Vancouver, BC",
   "Seattle, WA",
