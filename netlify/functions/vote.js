@@ -37,24 +37,34 @@ exports.handler = async (event) => {
     const { data: seeds, error: seedErr } = await supabase
       .from("bands")
       .select("city,name")
-      .eq("city", city);
+      .eq("city", city)
+      .order("name", { ascending: true });
 
     if (seedErr) return json(500, { error: seedErr.message });
 
+    // IMPORTANT: only valid votes count
     const { data: votes, error: voteErr } = await supabase
       .from("votes")
-      .select("band_name")
-      .eq("city", city);
+      .select("band_name, canonical_band_name, is_valid_vote")
+      .eq("city", city)
+      .or("is_valid_vote.is.null,is_valid_vote.eq.true");
 
     if (voteErr) return json(500, { error: voteErr.message });
 
     const totals = {};
     for (const v of votes || []) {
-      const b = v.band_name;
-      totals[b] = (totals[b] || 0) + 1;
+      const countedName = normalizeBandName(v.canonical_band_name || v.band_name);
+      if (!countedName) continue;
+      totals[countedName] = (totals[countedName] || 0) + 1;
     }
 
-    return json(200, { ok: true, city, seeds: seeds || [], totals, threshold: 10 });
+    return json(200, {
+      ok: true,
+      city,
+      seeds: seeds || [],
+      totals,
+      threshold: 10,
+    });
   }
 
   // POST: submit a vote
@@ -83,7 +93,7 @@ exports.handler = async (event) => {
       return json(400, { error: "voterType must be individual or band" });
     }
 
-    // 1) Match against official starter candidates in this city
+    // Match official starter candidates first
     const { data: officialBands } = await supabase
       .from("bands")
       .select("name")
@@ -96,44 +106,33 @@ exports.handler = async (event) => {
       bandName = officialMatch.name;
     }
 
-    // 2) Match against alias table
-    if (!officialMatch) {
-      const { data: aliases } = await supabase
-        .from("band_aliases")
-        .select("alias, canonical_name")
-        .eq("city", city);
+    // Alias match
+    const { data: aliases } = await supabase
+      .from("band_aliases")
+      .select("alias, canonical_name")
+      .eq("city", city);
 
-      const aliasMatch = (aliases || []).find(
-        (a) => normalizeBandName(a.alias).toLowerCase() === normalizedInput
-      );
-      if (aliasMatch) {
-        bandName = aliasMatch.canonical_name;
-      }
-    }
+    const aliasMatch = (aliases || []).find(
+      (a) => normalizeBandName(a.alias).toLowerCase() === normalizedInput
+    );
 
-    // 3) Match against existing votes in this city so case variations collapse
-    if (!officialMatch) {
-      const { data: existingVotes } = await supabase
-        .from("votes")
-        .select("band_name")
-        .eq("city", city);
-
-      const existingMatch = (existingVotes || []).find(
-        (v) => normalizeBandName(v.band_name).toLowerCase() === normalizedInput
-      );
-      if (existingMatch) {
-        bandName = existingMatch.band_name;
-      }
-    }
+    const canonicalBandName = aliasMatch
+      ? aliasMatch.canonical_name
+      : (officialMatch ? officialMatch.name : bandName);
 
     const { error: insErr } = await supabase.from("votes").insert([{
       city,
       band_name: bandName,
+      canonical_band_name: canonicalBandName,
+      normalized_email: voterEmail,
+      normalized_band_name: normalizedInput,
       voter_name: voterName,
       voter_email: voterEmail,
       voter_phone: voterPhone || null,
       voter_type: voterType,
       band_contact_email: bandContactEmail || null,
+      is_valid_vote: true,
+      invalid_reason: null,
     }]);
 
     if (insErr) return json(500, { error: insErr.message });
@@ -142,7 +141,8 @@ exports.handler = async (event) => {
       .from("votes")
       .select("id")
       .eq("city", city)
-      .eq("band_name", bandName);
+      .eq("canonical_band_name", canonicalBandName)
+      .or("is_valid_vote.is.null,is_valid_vote.eq.true");
 
     if (countErr) return json(500, { error: countErr.message });
 
@@ -150,9 +150,9 @@ exports.handler = async (event) => {
 
     return json(200, {
       ok: true,
-      message: `Thank you for voting! ${bandName} now has ${count} vote${count === 1 ? "" : "s"} in ${city}.`,
+      message: `Thank you for voting! ${canonicalBandName} now has ${count} vote${count === 1 ? "" : "s"} in ${city}.`,
       city,
-      bandName,
+      bandName: canonicalBandName,
       count,
       threshold: 10,
     });
