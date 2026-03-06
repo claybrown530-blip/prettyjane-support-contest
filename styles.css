@@ -307,3 +307,58 @@ img, canvas, svg, video {
   }
 }
 
+
+/* ===== Ethan iframe / 320px mobile fix ===== */
+html, body{
+  width:100%;
+  max-width:100%;
+  overflow-x:hidden;
+}
+
+.wrap, .grid, .grid-areas, .hero, .hero-card, .card, .voteCard, .boardCard, .leaderboard, .subcard{
+  width:100%;
+  max-width:100%;
+  min-width:0;
+}
+
+canvas, svg{
+  display:block;
+  max-width:100% !important;
+  height:auto !important;
+}
+
+img, iframe{
+  max-width:100%;
+  height:auto;
+}
+
+.citySelect, input, select, textarea, .btn, .ticketLink, .badge{
+  max-width:100%;
+}
+
+@media (max-width: 320px){
+  .wrap{
+    padding:14px;
+  }
+
+  .hero-card,
+  .card,
+  .voteCard,
+  .boardCard{
+    border-radius:18px;
+  }
+
+  .toggleRow{
+    grid-template-columns:1fr;
+  }
+
+  .pill,
+  .badge,
+  .ticketLink{
+    font-size:13px;
+  }
+
+  .citySelect{
+    width:100%;
+  }
+}
