@@ -362,3 +362,86 @@ img, iframe{
     width:100%;
   }
 }
+
+/* ===== Mobile right-side overflow fix ===== */
+html, body{
+  max-width:100%;
+  overflow-x:hidden;
+}
+
+body{
+  position:relative;
+}
+
+.wrap,
+.hero,
+.hero-top,
+.compactTop,
+.hero-card,
+.grid,
+.grid-areas,
+.card,
+.voteCard,
+.boardCard,
+.leaderboard,
+.subcard{
+  max-width:100%;
+  min-width:0;
+  box-sizing:border-box;
+}
+
+/* Keep mobile header inside viewport */
+@media (max-width: 520px){
+  .compactTop{
+    display:grid;
+    grid-template-columns:minmax(0,1fr) auto;
+    gap:12px;
+    align-items:start;
+  }
+
+  .compactTop .brand{
+    min-width:0;
+  }
+
+  .compactTop .brand h1{
+    font-size: clamp(42px, 12vw, 64px);
+    line-height:0.95;
+    margin:0;
+    max-width:100%;
+  }
+
+  .compactTop .badge{
+    justify-self:end;
+    max-width:48vw;
+    white-space:normal;
+  }
+
+  .ticketLink{
+    display:block;
+    width:100%;
+    max-width:100%;
+    text-align:center;
+  }
+}
+
+/* Form controls + pills + chart should never push wider */
+input,
+select,
+textarea,
+button,
+.ticketLink,
+.badge,
+.pill,
+.seedpill,
+.topitem{
+  max-width:100%;
+  box-sizing:border-box;
+  min-width:0;
+}
+
+canvas{
+  max-width:100% !important;
+  width:100% !important;
+  height:auto !important;
+  display:block;
+}
