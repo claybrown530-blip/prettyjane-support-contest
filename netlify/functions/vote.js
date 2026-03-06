@@ -11,11 +11,20 @@ const json = (statusCode, body) => ({
   body: JSON.stringify(body),
 });
 
-const normalizeBandName = (s) =>
+const normalize = (s) =>
   (s || "")
     .trim()
     .replace(/\s+/g, " ")
-    .replace(/[\u2019]/g, "'");
+    .replace(/[\u2019]/g, "'")
+    .toLowerCase();
+
+const badWords = [
+  "cum",
+  "penis",
+  "butthole",
+  "asshole",
+  "shit"
+];
 
 exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") return json(200, { ok: true });
@@ -29,7 +38,6 @@ exports.handler = async (event) => {
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-  // GET: leaderboard for a city
   if (event.httpMethod === "GET") {
     const city = (event.queryStringParameters?.city || "").trim();
     if (!city) return json(400, { error: "Missing city" });
@@ -42,10 +50,9 @@ exports.handler = async (event) => {
 
     if (seedErr) return json(500, { error: seedErr.message });
 
-    // IMPORTANT: only valid votes count
     const { data: votes, error: voteErr } = await supabase
       .from("votes")
-      .select("band_name, canonical_band_name, is_valid_vote")
+      .select("canonical_band_name, band_name, is_valid_vote")
       .eq("city", city)
       .or("is_valid_vote.is.null,is_valid_vote.eq.true");
 
@@ -53,9 +60,9 @@ exports.handler = async (event) => {
 
     const totals = {};
     for (const v of votes || []) {
-      const countedName = normalizeBandName(v.canonical_band_name || v.band_name);
-      if (!countedName) continue;
-      totals[countedName] = (totals[countedName] || 0) + 1;
+      const name = (v.canonical_band_name || v.band_name || "").trim();
+      if (!name) continue;
+      totals[name] = (totals[name] || 0) + 1;
     }
 
     return json(200, {
@@ -67,7 +74,6 @@ exports.handler = async (event) => {
     });
   }
 
-  // POST: submit a vote
   if (event.httpMethod === "POST") {
     let payload;
     try {
@@ -76,68 +82,121 @@ exports.handler = async (event) => {
       return json(400, { error: "Invalid JSON" });
     }
 
-    const city = (payload.city || "").trim();
-    let bandName = normalizeBandName(payload.bandName);
-    const normalizedInput = bandName.toLowerCase();
-
+    let city = (payload.city || "").trim();
     const voterName = (payload.voterName || "").trim();
     const voterEmail = (payload.voterEmail || "").trim().toLowerCase();
     const voterPhone = (payload.voterPhone || "").trim();
     const voterType = (payload.voterType || "").trim().toLowerCase();
     const bandContactEmail = (payload.bandContactEmail || "").trim().toLowerCase();
+    let bandName = (payload.bandName || "").trim();
 
-    if (!city || !bandName || !voterName || !voterEmail || !voterType) {
+    if (!city || !voterName || !voterEmail || !voterType || !bandName) {
       return json(400, { error: "Missing required fields" });
     }
+
     if (!["individual", "band"].includes(voterType)) {
       return json(400, { error: "voterType must be individual or band" });
     }
 
-    // Match official starter candidates first
-    const { data: officialBands } = await supabase
+    const normalizedEmail = voterEmail.trim().toLowerCase();
+    const normalizedBand = normalize(bandName);
+
+    if (!/^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$/.test(normalizedEmail)) {
+      return json(400, { error: "Please enter a valid email." });
+    }
+
+    if (badWords.some(w => normalizedBand.includes(w))) {
+      return json(400, { error: "That submission cannot be accepted." });
+    }
+
+    // One vote per email per city
+    const { data: existingVote } = await supabase
+      .from("votes")
+      .select("id")
+      .eq("city", city)
+      .eq("normalized_email", normalizedEmail)
+      .or("is_valid_vote.is.null,is_valid_vote.eq.true")
+      .limit(1);
+
+    if (existingVote && existingVote.length > 0) {
+      return json(400, { error: `Looks like this email already voted in ${city}.` });
+    }
+
+    let canonicalBandName = bandName;
+
+    // 1) Check city-local official bands
+    const { data: localBands } = await supabase
       .from("bands")
       .select("name")
       .eq("city", city);
 
-    const officialMatch = (officialBands || []).find(
-      (b) => normalizeBandName(b.name).toLowerCase() === normalizedInput
+    const localMatch = (localBands || []).find(
+      b => normalize(b.name) === normalizedBand
     );
-    if (officialMatch) {
-      bandName = officialMatch.name;
+
+    if (localMatch) {
+      canonicalBandName = localMatch.name;
+    } else {
+      // 2) Check global aliases and route to home city if found
+      const { data: globalAlias } = await supabase
+        .from("band_aliases_global")
+        .select("canonical_name, home_city")
+        .eq("alias", normalizedBand)
+        .limit(1);
+
+      if (globalAlias && globalAlias.length > 0) {
+        canonicalBandName = globalAlias[0].canonical_name;
+        city = globalAlias[0].home_city;
+      } else {
+        // 3) Check official bands globally
+        const { data: allBands } = await supabase
+          .from("bands")
+          .select("name, city");
+
+        const globalBandMatch = (allBands || []).find(
+          b => normalize(b.name) === normalizedBand
+        );
+
+        if (globalBandMatch) {
+          canonicalBandName = globalBandMatch.name;
+          city = globalBandMatch.city;
+        }
+      }
     }
 
-    // Alias match
-    const { data: aliases } = await supabase
-      .from("band_aliases")
-      .select("alias, canonical_name")
-      .eq("city", city);
+    // Re-check one vote per email per city after any reroute
+    const { data: reroutedExistingVote } = await supabase
+      .from("votes")
+      .select("id")
+      .eq("city", city)
+      .eq("normalized_email", normalizedEmail)
+      .or("is_valid_vote.is.null,is_valid_vote.eq.true")
+      .limit(1);
 
-    const aliasMatch = (aliases || []).find(
-      (a) => normalizeBandName(a.alias).toLowerCase() === normalizedInput
-    );
+    if (reroutedExistingVote && reroutedExistingVote.length > 0) {
+      return json(400, { error: `Looks like this email already voted in ${city}.` });
+    }
 
-    const canonicalBandName = aliasMatch
-      ? aliasMatch.canonical_name
-      : (officialMatch ? officialMatch.name : bandName);
+    const { error: insertErr } = await supabase
+      .from("votes")
+      .insert([{
+        city,
+        band_name: bandName,
+        canonical_band_name: canonicalBandName,
+        normalized_email: normalizedEmail,
+        normalized_band_name: normalizedBand,
+        voter_name: voterName,
+        voter_email: normalizedEmail,
+        voter_phone: voterPhone || null,
+        voter_type: voterType,
+        band_contact_email: bandContactEmail || null,
+        is_valid_vote: true,
+        invalid_reason: null,
+      }]);
 
-    const { error: insErr } = await supabase.from("votes").insert([{
-      city,
-      band_name: bandName,
-      canonical_band_name: canonicalBandName,
-      normalized_email: voterEmail,
-      normalized_band_name: normalizedInput,
-      voter_name: voterName,
-      voter_email: voterEmail,
-      voter_phone: voterPhone || null,
-      voter_type: voterType,
-      band_contact_email: bandContactEmail || null,
-      is_valid_vote: true,
-      invalid_reason: null,
-    }]);
+    if (insertErr) return json(500, { error: insertErr.message });
 
-    if (insErr) return json(500, { error: insErr.message });
-
-    const { data: bandVotes, error: countErr } = await supabase
+    const { data: currentVotes, error: countErr } = await supabase
       .from("votes")
       .select("id")
       .eq("city", city)
@@ -146,7 +205,7 @@ exports.handler = async (event) => {
 
     if (countErr) return json(500, { error: countErr.message });
 
-    const count = (bandVotes || []).length;
+    const count = (currentVotes || []).length;
 
     return json(200, {
       ok: true,
