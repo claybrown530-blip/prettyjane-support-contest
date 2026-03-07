@@ -18,6 +18,8 @@ const normalize = (s) =>
     .replace(/[\u2019]/g, "'")
     .toLowerCase();
 
+const emailRegex = /^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$/;
+
 const badWords = [
   "cum",
   "penis",
@@ -98,10 +100,10 @@ exports.handler = async (event) => {
       return json(400, { error: "voterType must be individual or band" });
     }
 
-    const normalizedEmail = voterEmail.trim().toLowerCase();
+    const normalizedEmail = voterEmail;
     const normalizedBand = normalize(bandName);
 
-    if (!/^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$/.test(normalizedEmail)) {
+    if (!emailRegex.test(normalizedEmail)) {
       return json(400, { error: "Please enter a valid email." });
     }
 
@@ -109,22 +111,9 @@ exports.handler = async (event) => {
       return json(400, { error: "That submission cannot be accepted." });
     }
 
-    // One vote per email per city
-    const { data: existingVote } = await supabase
-      .from("votes")
-      .select("id")
-      .eq("city", city)
-      .eq("normalized_email", normalizedEmail)
-      .or("is_valid_vote.is.null,is_valid_vote.eq.true")
-      .limit(1);
-
-    if (existingVote && existingVote.length > 0) {
-      return json(400, { error: `Looks like this email already voted in ${city}.` });
-    }
-
     let canonicalBandName = bandName;
 
-    // 1) Check city-local official bands
+    // 1) city-local official bands
     const { data: localBands } = await supabase
       .from("bands")
       .select("name")
@@ -137,7 +126,7 @@ exports.handler = async (event) => {
     if (localMatch) {
       canonicalBandName = localMatch.name;
     } else {
-      // 2) Check global aliases and route to home city if found
+      // 2) global aliases
       const { data: globalAlias } = await supabase
         .from("band_aliases_global")
         .select("canonical_name, home_city")
@@ -148,7 +137,7 @@ exports.handler = async (event) => {
         canonicalBandName = globalAlias[0].canonical_name;
         city = globalAlias[0].home_city;
       } else {
-        // 3) Check official bands globally
+        // 3) global official band match
         const { data: allBands } = await supabase
           .from("bands")
           .select("name, city");
@@ -164,8 +153,8 @@ exports.handler = async (event) => {
       }
     }
 
-    // Re-check one vote per email per city after any reroute
-    const { data: reroutedExistingVote } = await supabase
+    // duplicate protection AFTER any reroute
+    const { data: existingVote, error: dupErr } = await supabase
       .from("votes")
       .select("id")
       .eq("city", city)
@@ -173,7 +162,9 @@ exports.handler = async (event) => {
       .or("is_valid_vote.is.null,is_valid_vote.eq.true")
       .limit(1);
 
-    if (reroutedExistingVote && reroutedExistingVote.length > 0) {
+    if (dupErr) return json(500, { error: dupErr.message });
+
+    if (existingVote && existingVote.length > 0) {
       return json(400, { error: `Looks like this email already voted in ${city}.` });
     }
 
