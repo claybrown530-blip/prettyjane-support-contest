@@ -20,13 +20,7 @@ const normalize = (s) =>
 
 const emailRegex = /^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$/;
 
-const badWords = [
-  "cum",
-  "penis",
-  "butthole",
-  "asshole",
-  "shit"
-];
+const badWords = ["cum", "penis", "butthole", "asshole", "shit"];
 
 exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") return json(200, { ok: true });
@@ -113,7 +107,6 @@ exports.handler = async (event) => {
 
     let canonicalBandName = bandName;
 
-    // 1) city-local official bands
     const { data: localBands } = await supabase
       .from("bands")
       .select("name")
@@ -126,7 +119,6 @@ exports.handler = async (event) => {
     if (localMatch) {
       canonicalBandName = localMatch.name;
     } else {
-      // 2) global aliases
       const { data: globalAlias } = await supabase
         .from("band_aliases_global")
         .select("canonical_name, home_city")
@@ -137,7 +129,6 @@ exports.handler = async (event) => {
         canonicalBandName = globalAlias[0].canonical_name;
         city = globalAlias[0].home_city;
       } else {
-        // 3) global official band match
         const { data: allBands } = await supabase
           .from("bands")
           .select("name, city");
@@ -153,7 +144,6 @@ exports.handler = async (event) => {
       }
     }
 
-    // duplicate protection AFTER any reroute
     const { data: existingVote, error: dupErr } = await supabase
       .from("votes")
       .select("id")
@@ -165,7 +155,22 @@ exports.handler = async (event) => {
     if (dupErr) return json(500, { error: dupErr.message });
 
     if (existingVote && existingVote.length > 0) {
-      return json(400, { error: `Looks like this email already voted in ${city}.` });
+      const { count: currentCount, error: countErr } = await supabase
+        .from("votes")
+        .select("*", { count: "exact", head: true })
+        .eq("city", city)
+        .eq("canonical_band_name", canonicalBandName)
+        .or("is_valid_vote.is.null,is_valid_vote.eq.true");
+
+      if (countErr) return json(400, { error: `Looks like this email already voted in ${city}.` });
+
+      return json(400, {
+        error: `Looks like this email already voted in ${city}.`,
+        city,
+        bandName: canonicalBandName,
+        count: currentCount || 0,
+        threshold: 10,
+      });
     }
 
     const { error: insertErr } = await supabase
@@ -187,16 +192,17 @@ exports.handler = async (event) => {
 
     if (insertErr) return json(500, { error: insertErr.message });
 
-    const { data: currentVotes, error: countErr } = await supabase
+    // CRITICAL: count only valid votes, matching the live leaderboard logic
+    const { count: validCount, error: countErr } = await supabase
       .from("votes")
-      .select("id")
+      .select("*", { count: "exact", head: true })
       .eq("city", city)
       .eq("canonical_band_name", canonicalBandName)
       .or("is_valid_vote.is.null,is_valid_vote.eq.true");
 
     if (countErr) return json(500, { error: countErr.message });
 
-    const count = (currentVotes || []).length;
+    const count = validCount || 0;
 
     return json(200, {
       ok: true,
