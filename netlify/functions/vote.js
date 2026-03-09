@@ -7,6 +7,7 @@ const json = (statusCode, body) => ({
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+    "Cache-Control": "no-store",
   },
   body: JSON.stringify(body),
 });
@@ -19,8 +20,39 @@ const normalize = (s) =>
     .toLowerCase();
 
 const emailRegex = /^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$/;
-
 const badWords = ["cum", "penis", "butthole", "asshole", "shit"];
+
+async function getCityLeaderboardSnapshot(supabase, city) {
+  const { data: seeds, error: seedErr } = await supabase
+    .from("bands")
+    .select("city,name")
+    .eq("city", city)
+    .order("name", { ascending: true });
+
+  if (seedErr) throw seedErr;
+
+  const { data: votes, error: voteErr } = await supabase
+    .from("votes")
+    .select("canonical_band_name, band_name")
+    .eq("city", city)
+    .or("is_valid_vote.is.null,is_valid_vote.eq.true");
+
+  if (voteErr) throw voteErr;
+
+  const totals = {};
+  for (const v of votes || []) {
+    const name = (v.canonical_band_name || v.band_name || "").trim();
+    if (!name) continue;
+    totals[name] = (totals[name] || 0) + 1;
+  }
+
+  return {
+    city,
+    seeds: seeds || [],
+    totals,
+    threshold: 10,
+  };
+}
 
 exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") return json(200, { ok: true });
@@ -34,42 +66,20 @@ exports.handler = async (event) => {
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+  // GET leaderboard
   if (event.httpMethod === "GET") {
     const city = (event.queryStringParameters?.city || "").trim();
     if (!city) return json(400, { error: "Missing city" });
 
-    const { data: seeds, error: seedErr } = await supabase
-      .from("bands")
-      .select("city,name")
-      .eq("city", city)
-      .order("name", { ascending: true });
-
-    if (seedErr) return json(500, { error: seedErr.message });
-
-    const { data: votes, error: voteErr } = await supabase
-      .from("votes")
-      .select("canonical_band_name, band_name, is_valid_vote")
-      .eq("city", city)
-      .or("is_valid_vote.is.null,is_valid_vote.eq.true");
-
-    if (voteErr) return json(500, { error: voteErr.message });
-
-    const totals = {};
-    for (const v of votes || []) {
-      const name = (v.canonical_band_name || v.band_name || "").trim();
-      if (!name) continue;
-      totals[name] = (totals[name] || 0) + 1;
+    try {
+      const snapshot = await getCityLeaderboardSnapshot(supabase, city);
+      return json(200, { ok: true, ...snapshot });
+    } catch (err) {
+      return json(500, { error: err.message || "Failed to load leaderboard" });
     }
-
-    return json(200, {
-      ok: true,
-      city,
-      seeds: seeds || [],
-      totals,
-      threshold: 10,
-    });
   }
 
+  // POST vote
   if (event.httpMethod === "POST") {
     let payload;
     try {
@@ -101,40 +111,49 @@ exports.handler = async (event) => {
       return json(400, { error: "Please enter a valid email." });
     }
 
-    if (badWords.some(w => normalizedBand.includes(w))) {
+    if (badWords.some((w) => normalizedBand.includes(w))) {
       return json(400, { error: "That submission cannot be accepted." });
     }
 
     let canonicalBandName = bandName;
 
-    const { data: localBands } = await supabase
+    // 1) local city seed match
+    const { data: localBands, error: localErr } = await supabase
       .from("bands")
       .select("name")
       .eq("city", city);
 
+    if (localErr) return json(500, { error: localErr.message });
+
     const localMatch = (localBands || []).find(
-      b => normalize(b.name) === normalizedBand
+      (b) => normalize(b.name) === normalizedBand
     );
 
     if (localMatch) {
       canonicalBandName = localMatch.name;
     } else {
-      const { data: globalAlias } = await supabase
+      // 2) global alias routing
+      const { data: globalAlias, error: aliasErr } = await supabase
         .from("band_aliases_global")
         .select("canonical_name, home_city")
         .eq("alias", normalizedBand)
         .limit(1);
 
+      if (aliasErr) return json(500, { error: aliasErr.message });
+
       if (globalAlias && globalAlias.length > 0) {
         canonicalBandName = globalAlias[0].canonical_name;
         city = globalAlias[0].home_city;
       } else {
-        const { data: allBands } = await supabase
+        // 3) global exact official band match
+        const { data: allBands, error: allBandsErr } = await supabase
           .from("bands")
           .select("name, city");
 
+        if (allBandsErr) return json(500, { error: allBandsErr.message });
+
         const globalBandMatch = (allBands || []).find(
-          b => normalize(b.name) === normalizedBand
+          (b) => normalize(b.name) === normalizedBand
         );
 
         if (globalBandMatch) {
@@ -144,6 +163,7 @@ exports.handler = async (event) => {
       }
     }
 
+    // duplicate protection after reroute
     const { data: existingVote, error: dupErr } = await supabase
       .from("votes")
       .select("id")
@@ -155,22 +175,26 @@ exports.handler = async (event) => {
     if (dupErr) return json(500, { error: dupErr.message });
 
     if (existingVote && existingVote.length > 0) {
-      const { count: currentCount, error: countErr } = await supabase
-        .from("votes")
-        .select("*", { count: "exact", head: true })
-        .eq("city", city)
-        .eq("canonical_band_name", canonicalBandName)
-        .or("is_valid_vote.is.null,is_valid_vote.eq.true");
-
-      if (countErr) return json(400, { error: `Looks like this email already voted in ${city}.` });
-
-      return json(400, {
-        error: `Looks like this email already voted in ${city}.`,
-        city,
-        bandName: canonicalBandName,
-        count: currentCount || 0,
-        threshold: 10,
-      });
+      try {
+        const snapshot = await getCityLeaderboardSnapshot(supabase, city);
+        const count = snapshot.totals[canonicalBandName] || 0;
+        return json(400, {
+          error: `Looks like this email already voted in ${city}.`,
+          city,
+          bandName: canonicalBandName,
+          count,
+          threshold: 10,
+          snapshot,
+        });
+      } catch (err) {
+        return json(400, {
+          error: `Looks like this email already voted in ${city}.`,
+          city,
+          bandName: canonicalBandName,
+          count: 0,
+          threshold: 10,
+        });
+      }
     }
 
     const { error: insertErr } = await supabase
@@ -192,26 +216,22 @@ exports.handler = async (event) => {
 
     if (insertErr) return json(500, { error: insertErr.message });
 
-    // CRITICAL: count only valid votes, matching the live leaderboard logic
-    const { count: validCount, error: countErr } = await supabase
-      .from("votes")
-      .select("*", { count: "exact", head: true })
-      .eq("city", city)
-      .eq("canonical_band_name", canonicalBandName)
-      .or("is_valid_vote.is.null,is_valid_vote.eq.true");
+    try {
+      const snapshot = await getCityLeaderboardSnapshot(supabase, city);
+      const count = snapshot.totals[canonicalBandName] || 0;
 
-    if (countErr) return json(500, { error: countErr.message });
-
-    const count = validCount || 0;
-
-    return json(200, {
-      ok: true,
-      message: `Thank you for voting! ${canonicalBandName} now has ${count} vote${count === 1 ? "" : "s"} in ${city}.`,
-      city,
-      bandName: canonicalBandName,
-      count,
-      threshold: 10,
-    });
+      return json(200, {
+        ok: true,
+        message: `Thank you for voting! ${canonicalBandName} now has ${count} vote${count === 1 ? "" : "s"} in ${city}.`,
+        city,
+        bandName: canonicalBandName,
+        count,
+        threshold: 10,
+        snapshot,
+      });
+    } catch (err) {
+      return json(500, { error: err.message || "Vote saved, but failed to refresh totals." });
+    }
   }
 
   return json(405, { error: "Method not allowed" });
