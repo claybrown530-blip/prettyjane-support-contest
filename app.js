@@ -17,12 +17,7 @@ const cityStops = [
   "San Diego, CA",
 ];
 
-const OKC_BANDS = [
-  "Bella Burns",
-  "Kennedy Fine",
-  "MagentaBurn",
-  "ugly cowboys",
-];
+let okcBands = [];
 
 const form = document.getElementById("voteForm");
 const toast = document.getElementById("toast");
@@ -163,6 +158,9 @@ function renderChart(entries){
 }
 
 function renderCity(city, data){
+  if (city === "OKC, OK") {
+    okcBands = (data.seeds || []).map(b => typeof b === "string" ? b : b.name).filter(Boolean);
+  }
   // Keep dropdowns aligned
   if (citySelect.value !== city) citySelect.value = city;
   if (citySelectBoard.value !== city) citySelectBoard.value = city;
@@ -211,11 +209,12 @@ function setCity(city){
 function renderOkcButtons(){
   if (!okcBandButtons) return;
   okcBandButtons.innerHTML = "";
-  OKC_BANDS.forEach(name => {
+  okcBands.forEach(name => {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "okcBandBtn";
     btn.textContent = name;
+    if (bandNameInput.value === name) btn.classList.add("active");
     btn.onclick = () => {
       bandNameInput.value = name;
       document.querySelectorAll(".okcBandBtn").forEach(b => b.classList.remove("active"));
@@ -234,7 +233,7 @@ function updateBandInputMode(city){
   if (isOKC) {
     bandNameInput.placeholder = "Choose one of the approved OKC bands";
     if (!okcBandButtons.children.length) renderOkcButtons();
-    if (!OKC_BANDS.includes(bandNameInput.value)) {
+    if (!okcBands.includes(bandNameInput.value)) {
       bandNameInput.value = "";
     }
   } else {
