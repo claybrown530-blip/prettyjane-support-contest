@@ -98,6 +98,15 @@ function computeLeaderboard(data){
 }
 
 function renderSeedCandidates(data, city){
+  if (city === "OKC, OK") {
+    const seedsWrap = seedList?.closest(".seedSection") || seedList?.parentElement;
+    if (seedsWrap) seedsWrap.classList.add("hidden");
+    if (seedList) seedList.innerHTML = "";
+    return;
+  } else {
+    const seedsWrap = seedList?.closest(".seedSection") || seedList?.parentElement;
+    if (seedsWrap) seedsWrap.classList.remove("hidden");
+  }
   seedList.innerHTML = "";
   const seeds = (data.seeds || []).map(b=>b.name);
 
