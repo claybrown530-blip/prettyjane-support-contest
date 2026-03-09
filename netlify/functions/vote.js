@@ -139,6 +139,8 @@ exports.handler = async (event) => {
 
     if (localMatch) {
       canonicalBandName = localMatch.name;
+    } else if (city === "OKC, OK") {
+      return json(400, { error: "OKC is now in the final round. Please choose one of the approved OKC bands." });
     } else {
       const { data: globalAlias, error: aliasErr } = await supabase
         .from("band_aliases_global")
