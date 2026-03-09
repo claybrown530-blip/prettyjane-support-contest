@@ -17,6 +17,13 @@ const cityStops = [
   "San Diego, CA",
 ];
 
+const OKC_BANDS = [
+  "Bella Burns",
+  "Kennedy Fine",
+  "MagentaBurn",
+  "ugly cowboys",
+];
+
 const form = document.getElementById("voteForm");
 const toast = document.getElementById("toast");
 const citySelect = document.getElementById("citySelect");
@@ -26,6 +33,10 @@ const topList = document.getElementById("topList");
 const bandEmailWrap = document.getElementById("bandEmailWrap");
 const loadState = document.getElementById("loadState");
 const voteCard = document.getElementById("voteCard");
+const okcBandPicker = document.getElementById("okcBandPicker");
+const okcBandButtons = document.getElementById("okcBandButtons");
+const bandNameWrap = document.getElementById("bandNameWrap");
+const bandNameInput = document.getElementById("bandName");
 
 function setLoading(isLoading){
   if (!loadState) return;
@@ -187,6 +198,7 @@ async function refresh(force=false){
 function setCity(city){
   citySelect.value = city;
   citySelectBoard.value = city;
+  updateBandInputMode(city);
 
   // Update URL for shareability
   const url = new URL(window.location.href);
@@ -194,6 +206,41 @@ function setCity(city){
   window.history.replaceState({}, "", url.toString());
 
   refresh(false);
+}
+
+function renderOkcButtons(){
+  if (!okcBandButtons) return;
+  okcBandButtons.innerHTML = "";
+  OKC_BANDS.forEach(name => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "okcBandBtn";
+    btn.textContent = name;
+    btn.onclick = () => {
+      bandNameInput.value = name;
+      document.querySelectorAll(".okcBandBtn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+    };
+    okcBandButtons.appendChild(btn);
+  });
+}
+
+function updateBandInputMode(city){
+  const isOKC = city === "OKC, OK";
+
+  if (okcBandPicker) okcBandPicker.classList.toggle("hidden", !isOKC);
+  if (bandNameWrap) bandNameWrap.classList.toggle("hidden", isOKC);
+
+  if (isOKC) {
+    bandNameInput.placeholder = "Choose one of the approved OKC bands";
+    if (!okcBandButtons.children.length) renderOkcButtons();
+    if (!OKC_BANDS.includes(bandNameInput.value)) {
+      bandNameInput.value = "";
+    }
+  } else {
+    bandNameInput.placeholder = "Type a band name…";
+    document.querySelectorAll(".okcBandBtn").forEach(b => b.classList.remove("active"));
+  }
 }
 
 // Build both city selects

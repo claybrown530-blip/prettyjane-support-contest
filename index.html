@@ -95,7 +95,12 @@
             <select name="city" id="citySelect" required class="citySelect"></select>
           </label>
 
-          <label>Suggest a band / artist
+          <div id="okcBandPicker" class="okcBandPicker hidden">
+            <div class="fieldLabel">Choose an OKC band</div>
+            <div id="okcBandButtons" class="okcBandButtons"></div>
+          </div>
+
+          <label id="bandNameWrap">Suggest a band / artist
             <input name="bandName" id="bandName" required placeholder="Type a band name…" />
           </label>
 

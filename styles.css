@@ -445,3 +445,40 @@ canvas{
   height:auto !important;
   display:block;
 }
+
+/* OKC button-only band picker */
+.okcBandPicker{
+  margin-top:12px;
+}
+
+.okcBandButtons{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+  margin-top:8px;
+}
+
+.okcBandBtn{
+  border:1px solid var(--line);
+  background:#fff;
+  color:var(--ink);
+  border-radius:14px;
+  padding:12px 10px;
+  font-weight:700;
+  font-size:14px;
+  cursor:pointer;
+  text-align:center;
+  box-sizing:border-box;
+}
+
+.okcBandBtn.active{
+  border-color: rgba(43,66,137,.55);
+  background: rgba(43,66,137,.10);
+  box-shadow: 0 0 0 4px rgba(43,66,137,.10);
+}
+
+@media (max-width: 520px){
+  .okcBandButtons{
+    grid-template-columns:1fr;
+  }
+}
