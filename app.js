@@ -272,7 +272,12 @@ form.addEventListener("submit", async (e)=>{
   }
 
   // Force refresh so counts update immediately
-  await refresh(true);
+if (out.snapshot) {
+      cache[out.city] = { ts: Date.now(), data: out.snapshot };
+      renderBoard(out.snapshot);
+    }
+
+      await refresh(true);
 
   form.reset();
   bandEmailWrap.classList.add("hidden");
