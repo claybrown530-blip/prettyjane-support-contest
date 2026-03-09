@@ -31,19 +31,30 @@ async function getCityLeaderboardSnapshot(supabase, city) {
 
   if (seedErr) throw seedErr;
 
-  const { data: votes, error: voteErr } = await supabase
-    .from("votes")
-    .select("canonical_band_name, band_name")
-    .eq("city", city)
-    .or("is_valid_vote.is.null,is_valid_vote.eq.true");
-
-  if (voteErr) throw voteErr;
-
   const totals = {};
-  for (const v of votes || []) {
-    const name = (v.canonical_band_name || v.band_name || "").trim();
-    if (!name) continue;
-    totals[name] = (totals[name] || 0) + 1;
+  const pageSize = 1000;
+  let from = 0;
+
+  while (true) {
+    const to = from + pageSize - 1;
+
+    const { data: votes, error: voteErr } = await supabase
+      .from("votes")
+      .select("canonical_band_name, band_name")
+      .eq("city", city)
+      .or("is_valid_vote.is.null,is_valid_vote.eq.true")
+      .range(from, to);
+
+    if (voteErr) throw voteErr;
+
+    for (const v of votes || []) {
+      const name = (v.canonical_band_name || v.band_name || "").trim();
+      if (!name) continue;
+      totals[name] = (totals[name] || 0) + 1;
+    }
+
+    if (!votes || votes.length < pageSize) break;
+    from += pageSize;
   }
 
   return {
@@ -66,7 +77,6 @@ exports.handler = async (event) => {
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-  // GET leaderboard
   if (event.httpMethod === "GET") {
     const city = (event.queryStringParameters?.city || "").trim();
     if (!city) return json(400, { error: "Missing city" });
@@ -79,7 +89,6 @@ exports.handler = async (event) => {
     }
   }
 
-  // POST vote
   if (event.httpMethod === "POST") {
     let payload;
     try {
@@ -117,7 +126,6 @@ exports.handler = async (event) => {
 
     let canonicalBandName = bandName;
 
-    // 1) local city seed match
     const { data: localBands, error: localErr } = await supabase
       .from("bands")
       .select("name")
@@ -132,7 +140,6 @@ exports.handler = async (event) => {
     if (localMatch) {
       canonicalBandName = localMatch.name;
     } else {
-      // 2) global alias routing
       const { data: globalAlias, error: aliasErr } = await supabase
         .from("band_aliases_global")
         .select("canonical_name, home_city")
@@ -145,7 +152,6 @@ exports.handler = async (event) => {
         canonicalBandName = globalAlias[0].canonical_name;
         city = globalAlias[0].home_city;
       } else {
-        // 3) global exact official band match
         const { data: allBands, error: allBandsErr } = await supabase
           .from("bands")
           .select("name, city");
@@ -163,7 +169,6 @@ exports.handler = async (event) => {
       }
     }
 
-    // duplicate protection after reroute
     const { data: existingVote, error: dupErr } = await supabase
       .from("votes")
       .select("id")
