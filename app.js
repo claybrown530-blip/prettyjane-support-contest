@@ -160,6 +160,7 @@ function renderChart(entries){
 function renderCity(city, data){
   if (city === "OKC, OK") {
     okcBands = (data.seeds || []).map(b => typeof b === "string" ? b : b.name).filter(Boolean);
+    renderOkcButtons();
   }
   // Keep dropdowns aligned
   if (citySelect.value !== city) citySelect.value = city;
@@ -232,7 +233,7 @@ function updateBandInputMode(city){
 
   if (isOKC) {
     bandNameInput.placeholder = "Choose one of the approved OKC bands";
-    if (!okcBandButtons.children.length) renderOkcButtons();
+    renderOkcButtons();
     if (!okcBands.includes(bandNameInput.value)) {
       bandNameInput.value = "";
     }
