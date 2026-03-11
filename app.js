@@ -143,10 +143,9 @@ function renderChart(entries){
 }
 
 function renderCity(city, data){
-  if (city === "OKC, OK") {
-    okcBands = (data.seeds || []).map(b => typeof b === "string" ? b : b.name).filter(Boolean);
-    renderOkcButtons();
-  }
+  okcBands = (data.seeds || []).map(b => typeof b === "string" ? b : b.name).filter(Boolean);
+  renderOkcButtons();
+
   // Keep dropdowns aligned
   if (citySelect.value !== city) citySelect.value = city;
   if (citySelectBoard.value !== city) citySelectBoard.value = city;
