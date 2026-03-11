@@ -124,6 +124,10 @@ exports.handler = async (event) => {
       return json(400, { error: "That submission cannot be accepted." });
     }
 
+    if (city === "OKC, OK") {
+      return json(400, { error: "OKC voting is now closed." });
+    }
+
     let canonicalBandName = bandName;
 
     const { data: localBands, error: localErr } = await supabase
