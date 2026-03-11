@@ -53,16 +53,17 @@
 
         <div class="subcard">
           <div class="subcardHead">
-            <h4>Starter candidates</h4>
+            <h4>Approved roster</h4>
           </div>
           <div id="seedList" class="seedlist"></div>
-          <div class="writein">Don’t see your band? <strong>Write it in</strong> — it counts instantly.</div>
+          <div class="writein">Leaderboards only count approved roster bands for the selected city.</div>
         </div>
       </section>
 
       <!-- Vote form SECOND on mobile -->
       <section class="card voteCard" id="voteCard">
         <h3>Vote</h3>
+        <div id="cityClosedMsg" class="cityClosedMsg hidden">Voting is closed for OKC. You can still browse the leaderboard.</div>
         <form id="voteForm">
           <label>Your name
             <input name="voterName" required />
@@ -71,6 +72,12 @@
           <label>Your email
             <input name="voterEmail" type="email" required />
           </label>
+
+          <div class="hpField" aria-hidden="true">
+            <label>Company website
+              <input name="companyWebsite" type="text" tabindex="-1" autocomplete="off" />
+            </label>
+          </div>
 
           <div class="field">
             <div class="fieldLabel">Are you an individual or a band?</div>
@@ -95,7 +102,8 @@
           </label>
 
           <div id="okcBandPicker" class="okcBandPicker hidden">
-            <div class="fieldLabel">Choose a band</div>
+            <div class="fieldLabel">Choose an approved band</div>
+            <div class="pickerHint">Only approved roster bands can receive counted votes.</div>
             <div id="okcBandButtons" class="okcBandButtons"></div>
           </div>
 

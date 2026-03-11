@@ -220,7 +220,7 @@ function updateBandInputMode(city){
   if (okcBandPicker) okcBandPicker.classList.toggle("hidden", false);
   if (bandNameWrap) bandNameWrap.classList.add("hidden");
 
-  const formControls = voteForm?.querySelectorAll("input, button, textarea, select");
+  const formControls = form?.querySelectorAll("input, button, textarea, select");
   if (formControls) {
     formControls.forEach(el => {
       if (el.id !== "citySelect" && el.id !== "citySelectBoard") {
@@ -238,7 +238,7 @@ function updateBandInputMode(city){
     document.querySelectorAll(".okcBandBtn").forEach(b => b.classList.remove("active"));
   } else {
     if (bandNameInput) {
-      bandNameInput.placeholder = "Choose one of the listed bands";
+      bandNameInput.placeholder = "Choose one of the approved bands";
       if (!okcBands.includes(bandNameInput.value)) bandNameInput.value = "";
     }
     renderOkcButtons();
@@ -274,9 +274,20 @@ form.addEventListener("submit", async (e)=>{
     voterPhone: fd.get("voterPhone"),
     voterType: fd.get("voterType"),
     bandContactEmail: fd.get("bandContactEmail"),
+    companyWebsite: fd.get("companyWebsite"),
     city: fd.get("city"),
     bandName: fd.get("bandName"),
   };
+
+  if (!payload.bandName) {
+    showToastHTML("<strong>Please choose one of the approved bands first.</strong>");
+    return;
+  }
+
+  if (payload.city === "OKC, OK") {
+    showToastHTML("<strong>OKC voting is now closed.</strong>");
+    return;
+  }
 
   const res = await fetch(API, {
     method: "POST",
@@ -321,15 +332,19 @@ form.addEventListener("submit", async (e)=>{
   }
 
   // Force refresh so counts update immediately
-if (out.snapshot) {
-      cache[out.city] = { ts: Date.now(), data: out.snapshot };
-      renderBoard(out.snapshot);
-    }
+  if (out.snapshot) {
+    cache[out.city] = { ts: Date.now(), data: out.snapshot };
+    renderCity(out.city, out.snapshot);
+  }
 
-      await refresh(true);
+  await refresh(true);
 
   form.reset();
+  citySelect.value = out.city;
+  citySelectBoard.value = out.city;
+  if (bandNameInput) bandNameInput.value = "";
   bandEmailWrap.classList.add("hidden");
+  updateBandInputMode(out.city);
 });
 
 // Initialize

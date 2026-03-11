@@ -258,6 +258,20 @@ input:focus,select:focus{border-color:rgba(43,66,137,.55);box-shadow:0 0 0 4px r
   text-align:center;
 }
 
+.hpField{
+  position:absolute;
+  left:-9999px;
+  width:1px;
+  height:1px;
+  overflow:hidden;
+}
+
+.pickerHint{
+  margin-top:4px;
+  font-size:12px;
+  color:var(--muted);
+}
+
 
 /* Ticket link */
 .ticketLink{
