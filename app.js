@@ -150,7 +150,8 @@ function renderCity(city, data){
   if (citySelect.value !== city) citySelect.value = city;
   if (citySelectBoard.value !== city) citySelectBoard.value = city;
 
-  const entries = computeLeaderboard(data);
+  const approved = new Set(okcBands);
+  const entries = computeLeaderboard(data).filter(e => approved.size ? approved.has(e.name) : true);
   renderTopList(entries);
   renderChart(entries);
   renderSeedCandidates(data, city);
