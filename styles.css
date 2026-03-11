@@ -482,3 +482,12 @@ canvas{
     grid-template-columns:1fr;
   }
 }
+
+.cityClosedMsg{
+  margin: 0 0 12px 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(0,0,0,0.08);
+  background: rgba(43,66,137,.08);
+  font-weight: 700;
+}

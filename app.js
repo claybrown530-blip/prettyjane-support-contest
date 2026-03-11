@@ -32,6 +32,7 @@ const okcBandPicker = document.getElementById("okcBandPicker");
 const okcBandButtons = document.getElementById("okcBandButtons");
 const bandNameWrap = document.getElementById("bandNameWrap");
 const bandNameInput = document.getElementById("bandName");
+const cityClosedMsg = document.getElementById("cityClosedMsg");
 
 function setLoading(isLoading){
   if (!loadState) return;
@@ -237,11 +238,22 @@ function renderOkcButtons(){
 function updateBandInputMode(city){
   const isOKC = city === "OKC, OK";
 
+  if (cityClosedMsg) cityClosedMsg.classList.toggle("hidden", !isOKC);
   if (okcBandPicker) okcBandPicker.classList.toggle("hidden", !isOKC);
   if (bandNameWrap) bandNameWrap.classList.toggle("hidden", isOKC);
 
+  const formControls = voteForm?.querySelectorAll("input, button, textarea, select");
+  if (formControls) {
+    formControls.forEach(el => {
+      if (el.id !== "citySelect" && el.id !== "citySelectBoard") {
+        if (isOKC && el.name !== "city") el.disabled = true;
+        if (!isOKC) el.disabled = false;
+      }
+    });
+  }
+
   if (isOKC) {
-    bandNameInput.placeholder = "Choose one of the approved OKC bands";
+    bandNameInput.placeholder = "OKC voting is closed";
     renderOkcButtons();
     if (!okcBands.includes(bandNameInput.value)) {
       bandNameInput.value = "";
