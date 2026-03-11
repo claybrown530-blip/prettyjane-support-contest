@@ -510,3 +510,12 @@ canvas{
 .seedSection{
   display:none !important;
 }
+
+
+/* Hide starter candidates globally */
+.seedSection,
+.starterCandidates,
+#starterCandidates,
+[data-section="starter-candidates"]{
+  display: none !important;
+}

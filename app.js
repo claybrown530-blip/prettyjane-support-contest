@@ -99,34 +99,9 @@ function computeLeaderboard(data){
 }
 
 function renderSeedCandidates(data, city){
-  if (city === "OKC, OK") {
-    const seedsWrap = seedList?.closest(".seedSection") || seedList?.parentElement;
-    if (seedsWrap) seedsWrap.classList.add("hidden");
-    if (seedList) seedList.innerHTML = "";
-    return;
-  } else {
-    const seedsWrap = seedList?.closest(".seedSection") || seedList?.parentElement;
-    if (seedsWrap) seedsWrap.classList.remove("hidden");
-  }
-  seedList.innerHTML = "";
-  const seeds = (data.seeds || []).map(b=>b.name);
-
-  if (!seeds.length){
-    seedList.textContent = "No starter candidates yet.";
-    return;
-  }
-
-  seeds.forEach(n=>{
-    const pill = document.createElement("div");
-    pill.className = "seedpill";
-    pill.textContent = n;
-    pill.onclick = ()=> {
-      // sync city + fill band name
-      setCity(city);
-      setBandNameAndScroll(n);
-    };
-    seedList.appendChild(pill);
-  });
+  const seedsWrap = seedList?.closest(".seedSection") || seedList?.parentElement;
+  if (seedsWrap) seedsWrap.classList.add("hidden");
+  if (seedList) seedList.innerHTML = "";
 }
 
 function renderTopList(entries){
@@ -238,9 +213,12 @@ function renderOkcButtons(){
 function updateBandInputMode(city){
   const isOKC = city === "OKC, OK";
 
-  if (cityClosedMsg) cityClosedMsg.classList.toggle("hidden", !isOKC);
-  if (okcBandPicker) okcBandPicker.classList.toggle("hidden", !isOKC);
-  if (bandNameWrap) bandNameWrap.classList.toggle("hidden", isOKC);
+  if (typeof cityClosedMsg !== "undefined" && cityClosedMsg) {
+    cityClosedMsg.classList.toggle("hidden", !isOKC);
+  }
+
+  if (okcBandPicker) okcBandPicker.classList.toggle("hidden", false);
+  if (bandNameWrap) bandNameWrap.classList.add("hidden");
 
   const formControls = voteForm?.querySelectorAll("input, button, textarea, select");
   if (formControls) {
@@ -253,14 +231,17 @@ function updateBandInputMode(city){
   }
 
   if (isOKC) {
-    bandNameInput.placeholder = "OKC voting is closed";
-    renderOkcButtons();
-    if (!okcBands.includes(bandNameInput.value)) {
+    if (bandNameInput) {
+      bandNameInput.placeholder = "OKC voting is closed";
       bandNameInput.value = "";
     }
-  } else {
-    bandNameInput.placeholder = "Type a band name…";
     document.querySelectorAll(".okcBandBtn").forEach(b => b.classList.remove("active"));
+  } else {
+    if (bandNameInput) {
+      bandNameInput.placeholder = "Choose one of the listed bands";
+      if (!okcBands.includes(bandNameInput.value)) bandNameInput.value = "";
+    }
+    renderOkcButtons();
   }
 }
 
