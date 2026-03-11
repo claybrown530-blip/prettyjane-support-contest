@@ -10,6 +10,13 @@ const COUNT_THRESHOLD = 10;
 const CLOSED_CITY_MESSAGES = {
   "OKC, OK": "OKC voting is now closed.",
 };
+// Phase 2 rollout stays inert until these env flags are enabled after the migration.
+const VOTE_VERIFICATION_ENABLED = process.env.VOTE_VERIFICATION_ENABLED === "1";
+const VOTE_STATUS_WRITE_ENABLED =
+  process.env.VOTE_STATUS_WRITE_ENABLED === "1" || VOTE_VERIFICATION_ENABLED;
+const VOTE_STATUS_READ_ENABLED =
+  process.env.VOTE_STATUS_READ_ENABLED === "1" || VOTE_STATUS_WRITE_ENABLED;
+const STATUS_CHANGED_BY = "system:netlify_vote_function";
 
 const json = (statusCode, body) => ({
   statusCode,
@@ -22,6 +29,22 @@ const json = (statusCode, body) => ({
   },
   body: JSON.stringify(body),
 });
+
+function getEffectiveVoteStatus(vote) {
+  if (vote?.vote_status) return vote.vote_status;
+  if (vote?.is_valid_vote === true) return "counted";
+  if (vote?.is_valid_vote === false) return "rejected";
+  return "pending";
+}
+
+function isCountedVote(vote) {
+  return getEffectiveVoteStatus(vote) === "counted";
+}
+
+function isActiveVote(vote) {
+  const status = getEffectiveVoteStatus(vote);
+  return status === "counted" || status === "pending";
+}
 
 async function getCityRoster(supabase, city) {
   const { data, error } = await supabase
@@ -53,16 +76,22 @@ function buildVoteRow({
   bandName,
   canonicalBandName,
   city,
+  honeypotValue,
   invalidReason,
   isValidVote,
   normalizedBandName,
   normalizedEmail,
+  statusReasonCode,
+  statusReasonDetail,
+  submittedFrom,
+  verificationState,
+  voteStatus,
   voterEmail,
   voterName,
   voterPhone,
   voterType,
 }) {
-  return {
+  const voteRow = {
     city,
     band_name: bandName,
     canonical_band_name: canonicalBandName || null,
@@ -76,12 +105,44 @@ function buildVoteRow({
     is_valid_vote: isValidVote,
     invalid_reason: invalidReason || null,
   };
+
+  if (VOTE_STATUS_WRITE_ENABLED) {
+    const resolvedVoteStatus = voteStatus || (isValidVote ? "counted" : "rejected");
+
+    voteRow.vote_status = resolvedVoteStatus;
+    voteRow.status_reason_code = statusReasonCode || null;
+    voteRow.status_reason_detail = statusReasonDetail || null;
+    voteRow.status_changed_at = new Date().toISOString();
+    voteRow.status_changed_by = STATUS_CHANGED_BY;
+    voteRow.honeypot_value = honeypotValue || null;
+    voteRow.verification_state =
+      verificationState || (resolvedVoteStatus === "pending" ? "pending" : "not_requested");
+    voteRow.submitted_from = submittedFrom || "web_form";
+  }
+
+  return voteRow;
 }
 
 async function insertRejectedAuditVote(supabase, voteRow, invalidReason) {
+  const rejectedVoteRow = {
+    ...voteRow,
+    is_valid_vote: false,
+    invalid_reason: invalidReason,
+  };
+
+  if (VOTE_STATUS_WRITE_ENABLED) {
+    rejectedVoteRow.vote_status = "rejected";
+    rejectedVoteRow.status_reason_code = invalidReason;
+    rejectedVoteRow.status_reason_detail = null;
+    rejectedVoteRow.status_changed_at = new Date().toISOString();
+    rejectedVoteRow.status_changed_by = STATUS_CHANGED_BY;
+    rejectedVoteRow.verification_state = rejectedVoteRow.verification_state || "not_requested";
+    rejectedVoteRow.submitted_from = rejectedVoteRow.submitted_from || "web_form";
+  }
+
   const { error } = await supabase
     .from("votes")
-    .insert([{ ...voteRow, is_valid_vote: false, invalid_reason: invalidReason }]);
+    .insert([rejectedVoteRow]);
 
   if (error) {
     console.error("Failed to audit rejected vote", invalidReason, error.message);
@@ -95,21 +156,30 @@ async function getCityLeaderboardSnapshot(supabase, city) {
   const totals = {};
   const pageSize = 1000;
   let from = 0;
+  const voteSelect = VOTE_STATUS_READ_ENABLED
+    ? "canonical_band_name, band_name, vote_status, is_valid_vote"
+    : "canonical_band_name, band_name, is_valid_vote";
 
   while (approvedNames.size > 0) {
     const to = from + pageSize - 1;
 
-    const { data: votes, error: voteErr } = await supabase
+    let voteQuery = supabase
       .from("votes")
-      .select("canonical_band_name, band_name")
+      .select(voteSelect)
       .eq("city", city)
-      .eq("is_valid_vote", true)
       .range(from, to);
+
+    if (!VOTE_STATUS_READ_ENABLED) {
+      voteQuery = voteQuery.eq("is_valid_vote", true);
+    }
+
+    const { data: votes, error: voteErr } = await voteQuery;
 
     if (voteErr) throw voteErr;
 
     for (const vote of votes || []) {
       const name = (vote.canonical_band_name || vote.band_name || "").trim();
+      if (!isCountedVote(vote)) continue;
       if (!approvedNames.has(name)) continue;
       totals[name] = (totals[name] || 0) + 1;
     }
@@ -212,6 +282,7 @@ exports.handler = async (event) => {
       city,
       bandName: requestedBandName,
       canonicalBandName: null,
+      honeypotValue,
       normalizedEmail,
       normalizedBandName: normalizedBand,
       voterName,
@@ -221,6 +292,7 @@ exports.handler = async (event) => {
       bandContactEmail,
       isValidVote: false,
       invalidReason: null,
+      submittedFrom: "web_form",
     });
 
     if (honeypotValue) {
@@ -266,42 +338,60 @@ exports.handler = async (event) => {
       });
     }
 
-    const countedVoteRow = buildVoteRow({
+    const shouldStartPending = VOTE_VERIFICATION_ENABLED;
+    const submittedVoteRow = buildVoteRow({
       city,
       bandName: canonicalBandName,
       canonicalBandName,
+      honeypotValue,
       normalizedEmail,
       normalizedBandName: normalize(canonicalBandName),
+      statusReasonCode: shouldStartPending ? "verification_pending" : null,
+      statusReasonDetail: null,
+      submittedFrom: "web_form",
+      verificationState: shouldStartPending ? "pending" : "not_requested",
+      voteStatus: shouldStartPending ? "pending" : "counted",
       voterName,
       voterEmail: normalizedEmail,
       voterPhone,
       voterType,
       bandContactEmail,
-      isValidVote: true,
+      isValidVote: !shouldStartPending,
       invalidReason: null,
     });
 
-    const { data: existingVote, error: dupErr } = await supabase
+    let duplicateQuery = supabase
       .from("votes")
-      .select("id")
+      .select(
+        VOTE_STATUS_READ_ENABLED
+          ? "id, vote_status, is_valid_vote"
+          : "id, is_valid_vote"
+      )
       .eq("city", city)
       .eq("normalized_email", normalizedEmail)
-      .or("is_valid_vote.is.null,is_valid_vote.eq.true")
-      .limit(1);
+      .limit(VOTE_STATUS_READ_ENABLED ? 5 : 1);
+
+    if (!VOTE_STATUS_READ_ENABLED) {
+      duplicateQuery = duplicateQuery.or("is_valid_vote.is.null,is_valid_vote.eq.true");
+    }
+
+    const { data: existingVote, error: dupErr } = await duplicateQuery;
 
     if (dupErr) return json(500, { error: dupErr.message });
 
-    if (existingVote && existingVote.length > 0) {
-      await insertRejectedAuditVote(supabase, countedVoteRow, "duplicate_email_city");
+    const hasActiveDuplicate = (existingVote || []).some((vote) => isActiveVote(vote));
+
+    if (hasActiveDuplicate) {
+      await insertRejectedAuditVote(supabase, submittedVoteRow, "duplicate_email_city");
       return json(400, await buildDuplicateVoteResponse(supabase, city, canonicalBandName));
     }
 
     const { error: insertErr } = await supabase
       .from("votes")
-      .insert([countedVoteRow]);
+      .insert([submittedVoteRow]);
 
     if (insertErr?.code === "23505") {
-      await insertRejectedAuditVote(supabase, countedVoteRow, "duplicate_email_city");
+      await insertRejectedAuditVote(supabase, submittedVoteRow, "duplicate_email_city");
       return json(400, await buildDuplicateVoteResponse(supabase, city, canonicalBandName));
     }
 
@@ -310,6 +400,19 @@ exports.handler = async (event) => {
     try {
       const snapshot = await getCityLeaderboardSnapshot(supabase, city);
       const count = snapshot.totals[canonicalBandName] || 0;
+
+      if (shouldStartPending) {
+        return json(200, {
+          ok: true,
+          message: `Please check your email to confirm your vote for ${canonicalBandName} in ${city}.`,
+          city,
+          bandName: canonicalBandName,
+          count,
+          threshold: COUNT_THRESHOLD,
+          snapshot,
+          verificationRequired: true,
+        });
+      }
 
       return json(200, {
         ok: true,

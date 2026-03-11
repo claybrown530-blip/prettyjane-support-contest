@@ -1,17 +1,20 @@
 with votes_with_status as (
   select
-    normalized_email,
-    voter_name,
-    voter_phone,
-    city,
-    canonical_band_name,
-    created_at,
-    case
-      when is_valid_vote = true then 'counted'
-      when is_valid_vote = false then 'rejected'
-      else 'pending'
-    end as effective_status
-  from public.votes
+    v.normalized_email,
+    v.voter_name,
+    v.voter_phone,
+    v.city,
+    v.canonical_band_name,
+    v.created_at,
+    coalesce(
+      nullif(to_jsonb(v) ->> 'vote_status', ''),
+      case
+        when v.is_valid_vote = true then 'counted'
+        when v.is_valid_vote = false then 'rejected'
+        else 'pending'
+      end
+    ) as effective_status
+  from public.votes v
   where normalized_email is not null
     and normalized_email <> ''
 ),
