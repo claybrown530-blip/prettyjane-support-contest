@@ -491,3 +491,22 @@ canvas{
   background: rgba(43,66,137,.08);
   font-weight: 700;
 }
+
+#okcBandPicker{
+  display:block;
+}
+
+#okcBandButtons{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+  margin-top:10px;
+}
+
+.okcBandBtn{
+  min-height:44px;
+}
+
+.seedSection{
+  display:none !important;
+}
