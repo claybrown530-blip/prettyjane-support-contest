@@ -297,7 +297,7 @@ exports.handler = async (event) => {
     const voterPhone = (payload.voterPhone || "").trim();
     const voterType = (payload.voterType || "").trim().toLowerCase();
     const bandContactEmail = (payload.bandContactEmail || "").trim().toLowerCase();
-    const honeypotValue = (payload.companyWebsite || "").trim();
+    const honeypotValue = (payload.referralCode || payload.companyWebsite || "").trim();
     const requestedBandName = (payload.bandName || "").trim();
 
     if (!city || !voterName || !voterEmail || !voterType || !requestedBandName) {

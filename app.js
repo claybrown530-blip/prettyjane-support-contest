@@ -343,7 +343,7 @@ form.addEventListener("submit", async (e)=>{
     voterPhone: fd.get("voterPhone"),
     voterType: fd.get("voterType"),
     bandContactEmail: fd.get("bandContactEmail"),
-    companyWebsite: fd.get("companyWebsite"),
+    referralCode: fd.get("referralCode"),
     city: fd.get("city"),
     bandName: fd.get("bandName"),
   };
