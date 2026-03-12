@@ -6,6 +6,49 @@ let chart;
 const cache = {};
 const CACHE_TTL_MS = 15000;
 
+const CITY_RULES = {
+  "OKC, OK": {
+    closed: false,
+    allowWriteIns: false,
+    closedMessage: "Voting is closed for OKC. You can still browse the leaderboard.",
+  },
+  "Durango, CO": {
+    closed: true,
+    allowWriteIns: false,
+    closedMessage: "Voting is closed for Durango. You can still browse the leaderboard.",
+  },
+  "Santa Fe, NM": {
+    closed: false,
+    allowWriteIns: true,
+    closedMessage: "",
+  },
+  "Spokane, WA": {
+    closed: false,
+    allowWriteIns: false,
+    closedMessage: "",
+  },
+  "Vancouver, BC": {
+    closed: false,
+    allowWriteIns: false,
+    closedMessage: "",
+  },
+  "Seattle, WA": {
+    closed: false,
+    allowWriteIns: true,
+    closedMessage: "",
+  },
+  "San Francisco, CA": {
+    closed: false,
+    allowWriteIns: true,
+    closedMessage: "",
+  },
+  "San Diego, CA": {
+    closed: false,
+    allowWriteIns: false,
+    closedMessage: "",
+  },
+};
+
 const cityStops = [
   "OKC, OK",
   "Durango, CO",
@@ -78,6 +121,14 @@ function getVoterType(){
   return el ? el.value : "individual";
 }
 
+function getCityRule(city){
+  return CITY_RULES[city] || {
+    closed: false,
+    allowWriteIns: false,
+    closedMessage: "",
+  };
+}
+
 form.addEventListener("change", ()=>{
   const vt = getVoterType();
   bandEmailWrap.classList.toggle("hidden", vt !== "band");
@@ -89,6 +140,10 @@ async function fetchCity(city){
   if (!res.ok || !data.ok) throw new Error(data.error || `Backend error (status ${res.status})`);
   cache[city] = { ts: Date.now(), data };
   return data;
+}
+
+function getApprovedBands(data){
+  return (data?.seeds || []).map((band) => typeof band === "string" ? band : band.name).filter(Boolean);
 }
 
 function computeLeaderboard(data){
@@ -143,7 +198,7 @@ function renderChart(entries){
 }
 
 function renderCity(city, data){
-  okcBands = (data.seeds || []).map(b => typeof b === "string" ? b : b.name).filter(Boolean);
+  okcBands = getApprovedBands(data);
   renderOkcButtons();
 
   // Keep dropdowns aligned
@@ -151,7 +206,9 @@ function renderCity(city, data){
   if (citySelectBoard.value !== city) citySelectBoard.value = city;
 
   const approved = new Set(okcBands);
-  const entries = computeLeaderboard(data).filter(e => approved.size ? approved.has(e.name) : true);
+  const entries = computeLeaderboard(data).filter((entry) =>
+    approved.size ? approved.has(entry.name) : true
+  );
   renderTopList(entries);
   renderChart(entries);
   renderSeedCandidates(data, city);
@@ -180,6 +237,11 @@ async function refresh(force=false){
 }
 
 function setCity(city){
+  const cached = cache[city]?.data;
+  okcBands = cached ? getApprovedBands(cached) : [];
+  if (!cached && bandNameInput) bandNameInput.value = "";
+  renderOkcButtons();
+
   citySelect.value = city;
   citySelectBoard.value = city;
   updateBandInputMode(city);
@@ -211,37 +273,44 @@ function renderOkcButtons(){
 }
 
 function updateBandInputMode(city){
-  const isOKC = city === "OKC, OK";
+  const cityRule = getCityRule(city);
+  const isClosed = cityRule.closed;
+  const isButtonsOnly = !cityRule.allowWriteIns && !isClosed;
 
   if (typeof cityClosedMsg !== "undefined" && cityClosedMsg) {
-    cityClosedMsg.classList.toggle("hidden", !isOKC);
+    cityClosedMsg.textContent = cityRule.closedMessage || `Voting is closed for ${city}. You can still browse the leaderboard.`;
+    cityClosedMsg.classList.toggle("hidden", !isClosed);
   }
 
-  if (okcBandPicker) okcBandPicker.classList.toggle("hidden", false);
-  if (bandNameWrap) bandNameWrap.classList.add("hidden");
+  if (okcBandPicker) okcBandPicker.classList.toggle("hidden", !isButtonsOnly);
+  if (bandNameWrap) bandNameWrap.classList.toggle("hidden", isButtonsOnly || isClosed);
 
   const formControls = form?.querySelectorAll("input, button, textarea, select");
   if (formControls) {
     formControls.forEach(el => {
       if (el.id !== "citySelect" && el.id !== "citySelectBoard") {
-        if (isOKC && el.name !== "city") el.disabled = true;
-        if (!isOKC) el.disabled = false;
+        el.disabled = isClosed;
       }
     });
   }
 
-  if (isOKC) {
-    if (bandNameInput) {
-      bandNameInput.placeholder = "OKC voting is closed";
-      bandNameInput.value = "";
-    }
-    document.querySelectorAll(".okcBandBtn").forEach(b => b.classList.remove("active"));
-  } else {
+  if (isClosed) {
+    if (bandNameInput) bandNameInput.placeholder = `Voting is closed for ${city}`;
+    document.querySelectorAll(".okcBandBtn").forEach((button) => button.classList.remove("active"));
+    return;
+  }
+
+  if (isButtonsOnly) {
     if (bandNameInput) {
       bandNameInput.placeholder = "Choose one of the approved bands";
       if (!okcBands.includes(bandNameInput.value)) bandNameInput.value = "";
     }
     renderOkcButtons();
+    return;
+  }
+
+  if (bandNameInput) {
+    bandNameInput.placeholder = "Type a band name…";
   }
 }
 
@@ -280,12 +349,18 @@ form.addEventListener("submit", async (e)=>{
   };
 
   if (!payload.bandName) {
-    showToastHTML("<strong>Please choose one of the approved bands first.</strong>");
+    const cityRule = getCityRule(payload.city);
+    showToastHTML(
+      cityRule.allowWriteIns
+        ? "<strong>Please enter a band name first.</strong>"
+        : "<strong>Please choose one of the approved bands first.</strong>"
+    );
     return;
   }
 
-  if (payload.city === "OKC, OK") {
-    showToastHTML("<strong>OKC voting is now closed.</strong>");
+  const cityRule = getCityRule(payload.city);
+  if (cityRule.closed) {
+    showToastHTML(`<strong>${cityRule.closedMessage || `Voting is closed for ${payload.city}.`}</strong>`);
     return;
   }
 

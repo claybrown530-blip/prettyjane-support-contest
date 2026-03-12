@@ -7,8 +7,40 @@ const {
 } = require("./_shared/anti-abuse");
 
 const COUNT_THRESHOLD = 10;
-const CLOSED_CITY_MESSAGES = {
-  "OKC, OK": "OKC voting is now closed.",
+const CITY_RULES = {
+  "OKC, OK": {
+    closed: false,
+    allowWriteIns: false,
+  },
+  "Durango, CO": {
+    closed: true,
+    allowWriteIns: false,
+    closedMessage: "Durango voting is now closed.",
+  },
+  "Santa Fe, NM": {
+    closed: false,
+    allowWriteIns: true,
+  },
+  "Spokane, WA": {
+    closed: false,
+    allowWriteIns: false,
+  },
+  "Vancouver, BC": {
+    closed: false,
+    allowWriteIns: false,
+  },
+  "Seattle, WA": {
+    closed: false,
+    allowWriteIns: true,
+  },
+  "San Francisco, CA": {
+    closed: false,
+    allowWriteIns: true,
+  },
+  "San Diego, CA": {
+    closed: false,
+    allowWriteIns: false,
+  },
 };
 // Phase 2 rollout stays inert until these env flags are enabled after the migration.
 const VOTE_VERIFICATION_ENABLED = process.env.VOTE_VERIFICATION_ENABLED === "1";
@@ -44,6 +76,13 @@ function isCountedVote(vote) {
 function isActiveVote(vote) {
   const status = getEffectiveVoteStatus(vote);
   return status === "counted" || status === "pending";
+}
+
+function getCityRule(city) {
+  return CITY_RULES[city] || {
+    closed: false,
+    allowWriteIns: false,
+  };
 }
 
 async function getCityRoster(supabase, city) {
@@ -181,6 +220,7 @@ async function getCityLeaderboardSnapshot(supabase, city) {
       const name = (vote.canonical_band_name || vote.band_name || "").trim();
       if (!isCountedVote(vote)) continue;
       if (!approvedNames.has(name)) continue;
+      if (!name) continue;
       totals[name] = (totals[name] || 0) + 1;
     }
 
@@ -311,9 +351,13 @@ exports.handler = async (event) => {
       return json(400, { error: "Please use a real email address." });
     }
 
-    if (CLOSED_CITY_MESSAGES[city]) {
+    const cityRule = getCityRule(city);
+
+    if (cityRule.closed) {
       await insertRejectedAuditVote(supabase, auditBaseVote, "city_closed");
-      return json(400, { error: CLOSED_CITY_MESSAGES[city] });
+      return json(400, {
+        error: cityRule.closedMessage || `Voting is now closed for ${city}.`,
+      });
     }
 
     let roster;
@@ -324,19 +368,21 @@ exports.handler = async (event) => {
     }
 
     const { canonicalByNormalized } = buildRosterLookup(roster);
-    const canonicalBandName = canonicalByNormalized.get(normalizedBand);
+    const rosterBandName = canonicalByNormalized.get(normalizedBand);
 
     if (!roster.length) {
       await insertRejectedAuditVote(supabase, auditBaseVote, "city_not_open");
       return json(400, { error: `Voting is not open for ${city}.` });
     }
 
-    if (!canonicalBandName) {
+    if (!cityRule.allowWriteIns && !rosterBandName) {
       await insertRejectedAuditVote(supabase, auditBaseVote, "band_not_on_roster");
       return json(400, {
         error: `Please choose one of the approved bands for ${city}.`,
       });
     }
+
+    const canonicalBandName = rosterBandName || requestedBandName;
 
     const shouldStartPending = VOTE_VERIFICATION_ENABLED;
     const submittedVoteRow = buildVoteRow({
