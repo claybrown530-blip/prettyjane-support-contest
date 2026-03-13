@@ -9,8 +9,9 @@ const {
 const COUNT_THRESHOLD = 10;
 const CITY_RULES = {
   "OKC, OK": {
-    closed: false,
+    closed: true,
     allowWriteIns: false,
+    closedMessage: "OKC voting is now closed.",
   },
   "Durango, CO": {
     closed: true,
@@ -18,16 +19,19 @@ const CITY_RULES = {
     closedMessage: "Durango voting is now closed.",
   },
   "Santa Fe, NM": {
-    closed: false,
-    allowWriteIns: true,
+    closed: true,
+    allowWriteIns: false,
+    closedMessage: "Santa Fe voting is now closed.",
   },
   "Spokane, WA": {
-    closed: false,
+    closed: true,
     allowWriteIns: false,
+    closedMessage: "Spokane voting is now closed.",
   },
   "Vancouver, BC": {
-    closed: false,
+    closed: true,
     allowWriteIns: false,
+    closedMessage: "Vancouver voting is now closed.",
   },
   "Seattle, WA": {
     closed: false,
@@ -39,7 +43,7 @@ const CITY_RULES = {
   },
   "San Diego, CA": {
     closed: false,
-    allowWriteIns: false,
+    allowWriteIns: true,
   },
 };
 // Phase 2 rollout stays inert until these env flags are enabled after the migration.
@@ -189,6 +193,7 @@ async function insertRejectedAuditVote(supabase, voteRow, invalidReason) {
 }
 
 async function getCityLeaderboardSnapshot(supabase, city) {
+  const cityRule = getCityRule(city);
   const roster = await getCityRoster(supabase, city);
   const { approvedNames } = buildRosterLookup(roster);
 
@@ -199,7 +204,7 @@ async function getCityLeaderboardSnapshot(supabase, city) {
     ? "canonical_band_name, band_name, vote_status, is_valid_vote"
     : "canonical_band_name, band_name, is_valid_vote";
 
-  while (approvedNames.size > 0) {
+  while (true) {
     const to = from + pageSize - 1;
 
     let voteQuery = supabase
@@ -219,8 +224,8 @@ async function getCityLeaderboardSnapshot(supabase, city) {
     for (const vote of votes || []) {
       const name = (vote.canonical_band_name || vote.band_name || "").trim();
       if (!isCountedVote(vote)) continue;
-      if (!approvedNames.has(name)) continue;
       if (!name) continue;
+      if (!cityRule.allowWriteIns && !approvedNames.has(name)) continue;
       totals[name] = (totals[name] || 0) + 1;
     }
 

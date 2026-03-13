@@ -8,7 +8,7 @@ const CACHE_TTL_MS = 15000;
 
 const CITY_RULES = {
   "OKC, OK": {
-    closed: false,
+    closed: true,
     allowWriteIns: false,
     closedMessage: "Voting is closed for OKC. You can still browse the leaderboard.",
   },
@@ -18,19 +18,19 @@ const CITY_RULES = {
     closedMessage: "Voting is closed for Durango. You can still browse the leaderboard.",
   },
   "Santa Fe, NM": {
-    closed: false,
-    allowWriteIns: true,
-    closedMessage: "",
+    closed: true,
+    allowWriteIns: false,
+    closedMessage: "Voting is closed for Santa Fe. You can still browse the leaderboard.",
   },
   "Spokane, WA": {
-    closed: false,
+    closed: true,
     allowWriteIns: false,
-    closedMessage: "",
+    closedMessage: "Voting is closed for Spokane. You can still browse the leaderboard.",
   },
   "Vancouver, BC": {
-    closed: false,
+    closed: true,
     allowWriteIns: false,
-    closedMessage: "",
+    closedMessage: "Voting is closed for Vancouver. You can still browse the leaderboard.",
   },
   "Seattle, WA": {
     closed: false,
@@ -44,7 +44,7 @@ const CITY_RULES = {
   },
   "San Diego, CA": {
     closed: false,
-    allowWriteIns: false,
+    allowWriteIns: true,
     closedMessage: "",
   },
 };
@@ -205,10 +205,12 @@ function renderCity(city, data){
   if (citySelect.value !== city) citySelect.value = city;
   if (citySelectBoard.value !== city) citySelectBoard.value = city;
 
+  const cityRule = getCityRule(city);
   const approved = new Set(okcBands);
-  const entries = computeLeaderboard(data).filter((entry) =>
-    approved.size ? approved.has(entry.name) : true
-  );
+  const entries = computeLeaderboard(data).filter((entry) => {
+    if (cityRule.allowWriteIns) return true;
+    return approved.size ? approved.has(entry.name) : true;
+  });
   renderTopList(entries);
   renderChart(entries);
   renderSeedCandidates(data, city);
