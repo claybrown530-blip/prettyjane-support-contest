@@ -7,6 +7,7 @@ const {
 } = require("./_shared/anti-abuse");
 
 const COUNT_THRESHOLD = 10;
+const WRITE_IN_LEADERBOARD_THRESHOLD = 5;
 const CITY_RULES = {
   "OKC, OK": {
     closed: true,
@@ -192,16 +193,50 @@ async function insertRejectedAuditVote(supabase, voteRow, invalidReason) {
   }
 }
 
+function buildVisibleTotals(cityRule, approvedNames, countedTotals) {
+  const totals = {};
+
+  for (const [name, count] of Object.entries(countedTotals || {})) {
+    if (!name) continue;
+    if (approvedNames.has(name)) {
+      totals[name] = count;
+      continue;
+    }
+
+    if (cityRule.allowWriteIns && count >= WRITE_IN_LEADERBOARD_THRESHOLD) {
+      totals[name] = count;
+    }
+  }
+
+  return totals;
+}
+
+function pickWriteInDisplayName(labelCounts) {
+  return Object.entries(labelCounts || {})
+    .sort((a, b) => {
+      if (b[1] !== a[1]) return b[1] - a[1];
+      if (a[0].length !== b[0].length) return a[0].length - b[0].length;
+      return a[0].localeCompare(b[0]);
+    })[0]?.[0] || null;
+}
+
+function toPublicSnapshot(snapshot) {
+  const { countedTotals, writeInCountByNormalizedName, ...publicSnapshot } = snapshot || {};
+  return publicSnapshot;
+}
+
 async function getCityLeaderboardSnapshot(supabase, city) {
+  const cityRule = getCityRule(city);
   const roster = await getCityRoster(supabase, city);
   const { approvedNames } = buildRosterLookup(roster);
 
-  const totals = {};
+  const countedTotals = {};
+  const writeInGroups = {};
   const pageSize = 1000;
   let from = 0;
   const voteSelect = VOTE_STATUS_READ_ENABLED
-    ? "canonical_band_name, band_name, vote_status, is_valid_vote"
-    : "canonical_band_name, band_name, is_valid_vote";
+    ? "canonical_band_name, band_name, normalized_band_name, vote_status, is_valid_vote"
+    : "canonical_band_name, band_name, normalized_band_name, is_valid_vote";
 
   while (true) {
     const to = from + pageSize - 1;
@@ -222,35 +257,75 @@ async function getCityLeaderboardSnapshot(supabase, city) {
 
     for (const vote of votes || []) {
       const name = (vote.canonical_band_name || vote.band_name || "").trim();
+      const normalizedName = (vote.normalized_band_name || normalize(name)).trim();
       if (!isCountedVote(vote)) continue;
       if (!name) continue;
-      if (!approvedNames.has(name)) continue;
-      totals[name] = (totals[name] || 0) + 1;
+
+      if (approvedNames.has(name) || !cityRule.allowWriteIns) {
+        countedTotals[name] = (countedTotals[name] || 0) + 1;
+        continue;
+      }
+
+      if (!normalizedName) continue;
+
+      if (!writeInGroups[normalizedName]) {
+        writeInGroups[normalizedName] = {
+          count: 0,
+          labelCounts: {},
+        };
+      }
+
+      writeInGroups[normalizedName].count += 1;
+      writeInGroups[normalizedName].labelCounts[name] =
+        (writeInGroups[normalizedName].labelCounts[name] || 0) + 1;
     }
 
     if (!votes || votes.length < pageSize) break;
     from += pageSize;
   }
 
+  const visibleWriteInTotals = {};
+  const writeInCountByNormalizedName = {};
+
+  for (const [normalizedName, group] of Object.entries(writeInGroups)) {
+    writeInCountByNormalizedName[normalizedName] = group.count;
+    if (group.count < WRITE_IN_LEADERBOARD_THRESHOLD) continue;
+
+    const displayName = pickWriteInDisplayName(group.labelCounts);
+    if (!displayName) continue;
+    visibleWriteInTotals[displayName] = group.count;
+  }
+
   return {
     city,
     seeds: roster,
-    totals,
+    totals: {
+      ...buildVisibleTotals(cityRule, approvedNames, countedTotals),
+      ...visibleWriteInTotals,
+    },
     threshold: COUNT_THRESHOLD,
+    writeInVisibilityThreshold: WRITE_IN_LEADERBOARD_THRESHOLD,
+    countedTotals,
+    writeInCountByNormalizedName,
   };
 }
 
 async function buildDuplicateVoteResponse(supabase, city, canonicalBandName) {
   try {
     const snapshot = await getCityLeaderboardSnapshot(supabase, city);
-    const count = snapshot.totals[canonicalBandName] || 0;
+    const normalizedBandName = normalize(canonicalBandName);
+    const count = snapshot.countedTotals?.[canonicalBandName]
+      || snapshot.writeInCountByNormalizedName?.[normalizedBandName]
+      || snapshot.totals[canonicalBandName]
+      || 0;
     return {
       error: `Looks like this email already voted in ${city}.`,
       city,
       bandName: canonicalBandName,
       count,
       threshold: COUNT_THRESHOLD,
-      snapshot,
+      writeInVisibilityThreshold: snapshot.writeInVisibilityThreshold,
+      snapshot: toPublicSnapshot(snapshot),
     };
   } catch (error) {
     return {
@@ -259,6 +334,7 @@ async function buildDuplicateVoteResponse(supabase, city, canonicalBandName) {
       bandName: canonicalBandName,
       count: 0,
       threshold: COUNT_THRESHOLD,
+      writeInVisibilityThreshold: WRITE_IN_LEADERBOARD_THRESHOLD,
     };
   }
 }
@@ -281,7 +357,7 @@ exports.handler = async (event) => {
 
     try {
       const snapshot = await getCityLeaderboardSnapshot(supabase, city);
-      return json(200, { ok: true, ...snapshot });
+      return json(200, { ok: true, ...toPublicSnapshot(snapshot) });
     } catch (error) {
       return json(500, { error: error.message || "Failed to load leaderboard" });
     }
@@ -449,9 +525,14 @@ exports.handler = async (event) => {
 
     try {
       const snapshot = await getCityLeaderboardSnapshot(supabase, city);
-      const count = snapshot.totals[canonicalBandName] || 0;
-
-      const leaderboardEligible = Boolean(rosterBandName);
+      const count = snapshot.countedTotals?.[canonicalBandName]
+        || snapshot.writeInCountByNormalizedName?.[normalize(canonicalBandName)]
+        || snapshot.totals[canonicalBandName]
+        || 0;
+      const leaderboardEligible = Boolean(rosterBandName) || (
+        cityRule.allowWriteIns && count >= WRITE_IN_LEADERBOARD_THRESHOLD
+      );
+      const publicSnapshot = toPublicSnapshot(snapshot);
 
       if (shouldStartPending) {
         return json(200, {
@@ -461,8 +542,9 @@ exports.handler = async (event) => {
           bandName: canonicalBandName,
           count,
           threshold: COUNT_THRESHOLD,
-          snapshot,
+          snapshot: publicSnapshot,
           leaderboardEligible,
+          writeInVisibilityThreshold: WRITE_IN_LEADERBOARD_THRESHOLD,
           verificationRequired: true,
         });
       }
@@ -475,8 +557,9 @@ exports.handler = async (event) => {
           bandName: canonicalBandName,
           count,
           threshold: COUNT_THRESHOLD,
-          snapshot,
+          snapshot: publicSnapshot,
           leaderboardEligible: false,
+          writeInVisibilityThreshold: WRITE_IN_LEADERBOARD_THRESHOLD,
         });
       }
 
@@ -487,8 +570,9 @@ exports.handler = async (event) => {
         bandName: canonicalBandName,
         count,
         threshold: COUNT_THRESHOLD,
-        snapshot,
-        leaderboardEligible: true,
+        snapshot: publicSnapshot,
+        leaderboardEligible,
+        writeInVisibilityThreshold: WRITE_IN_LEADERBOARD_THRESHOLD,
       });
     } catch (error) {
       return json(500, { error: error.message || "Vote saved, but failed to refresh totals." });
