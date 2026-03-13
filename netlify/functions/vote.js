@@ -193,7 +193,6 @@ async function insertRejectedAuditVote(supabase, voteRow, invalidReason) {
 }
 
 async function getCityLeaderboardSnapshot(supabase, city) {
-  const cityRule = getCityRule(city);
   const roster = await getCityRoster(supabase, city);
   const { approvedNames } = buildRosterLookup(roster);
 
@@ -225,7 +224,7 @@ async function getCityLeaderboardSnapshot(supabase, city) {
       const name = (vote.canonical_band_name || vote.band_name || "").trim();
       if (!isCountedVote(vote)) continue;
       if (!name) continue;
-      if (!cityRule.allowWriteIns && !approvedNames.has(name)) continue;
+      if (!approvedNames.has(name)) continue;
       totals[name] = (totals[name] || 0) + 1;
     }
 
@@ -452,6 +451,8 @@ exports.handler = async (event) => {
       const snapshot = await getCityLeaderboardSnapshot(supabase, city);
       const count = snapshot.totals[canonicalBandName] || 0;
 
+      const leaderboardEligible = Boolean(rosterBandName);
+
       if (shouldStartPending) {
         return json(200, {
           ok: true,
@@ -461,7 +462,21 @@ exports.handler = async (event) => {
           count,
           threshold: COUNT_THRESHOLD,
           snapshot,
+          leaderboardEligible,
           verificationRequired: true,
+        });
+      }
+
+      if (!leaderboardEligible && cityRule.allowWriteIns) {
+        return json(200, {
+          ok: true,
+          message: `Thank you for voting! ${canonicalBandName} was submitted as a write-in in ${city}.`,
+          city,
+          bandName: canonicalBandName,
+          count,
+          threshold: COUNT_THRESHOLD,
+          snapshot,
+          leaderboardEligible: false,
         });
       }
 
@@ -473,6 +488,7 @@ exports.handler = async (event) => {
         count,
         threshold: COUNT_THRESHOLD,
         snapshot,
+        leaderboardEligible: true,
       });
     } catch (error) {
       return json(500, { error: error.message || "Vote saved, but failed to refresh totals." });

@@ -205,12 +205,10 @@ function renderCity(city, data){
   if (citySelect.value !== city) citySelect.value = city;
   if (citySelectBoard.value !== city) citySelectBoard.value = city;
 
-  const cityRule = getCityRule(city);
   const approved = new Set(okcBands);
-  const entries = computeLeaderboard(data).filter((entry) => {
-    if (cityRule.allowWriteIns) return true;
-    return approved.size ? approved.has(entry.name) : true;
-  });
+  const entries = computeLeaderboard(data).filter((entry) =>
+    approved.size ? approved.has(entry.name) : true
+  );
   renderTopList(entries);
   renderChart(entries);
   renderSeedCandidates(data, city);
@@ -381,9 +379,11 @@ form.addEventListener("submit", async (e)=>{
   confettiBurst();
 
   const count = out.count || 1;
-  const progress = count < THRESHOLD
-    ? `<div class="mini">${count}/${THRESHOLD} votes to hit the leaderboard.</div>`
-    : `<div class="mini">🎉 ${out.bandName} is on the leaderboard.</div>`;
+  const progress = out.leaderboardEligible === false
+    ? `<div class="mini">Write-ins stay off the live leaderboard until approved.</div>`
+    : count < THRESHOLD
+      ? `<div class="mini">${count}/${THRESHOLD} votes to hit the leaderboard.</div>`
+      : `<div class="mini">🎉 ${out.bandName} is on the leaderboard.</div>`;
 
   showToastHTML(`
     <strong>${out.message}</strong>
