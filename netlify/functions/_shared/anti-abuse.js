@@ -45,6 +45,9 @@ const normalize = (value) =>
     .replace(/[\u2019]/g, "'")
     .toLowerCase();
 
+const normalizeWriteInGroup = (value) =>
+  normalize(value).replace(/\s+/g, "");
+
 const getEmailDomain = (email) => {
   const normalizedEmail = (email || "").trim().toLowerCase();
   const parts = normalizedEmail.split("@");
@@ -71,4 +74,5 @@ module.exports = {
   getEmailDomain,
   hasTrollContent,
   normalize,
+  normalizeWriteInGroup,
 };

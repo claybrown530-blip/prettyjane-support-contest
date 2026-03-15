@@ -4,6 +4,7 @@ const {
   findBlockedEmailDomainReason,
   hasTrollContent,
   normalize,
+  normalizeWriteInGroup,
 } = require("./_shared/anti-abuse");
 
 const COUNT_THRESHOLD = 10;
@@ -220,6 +221,87 @@ function pickWriteInDisplayName(labelCounts) {
     })[0]?.[0] || null;
 }
 
+function getWriteInGroupKey(value) {
+  return normalizeWriteInGroup(value).trim();
+}
+
+function createLeaderboardAggregation(roster, cityRule) {
+  const { approvedNames } = buildRosterLookup(roster);
+
+  return {
+    approvedNames,
+    cityRule,
+    countedTotals: {},
+    roster,
+    writeInGroups: {},
+  };
+}
+
+function applyVoteToLeaderboardAggregation(aggregation, vote) {
+  const { approvedNames, cityRule, countedTotals, writeInGroups } = aggregation;
+  const name = (vote.canonical_band_name || vote.band_name || "").trim();
+  const writeInGroupKey = getWriteInGroupKey(vote.normalized_band_name || name);
+
+  if (!isCountedVote(vote)) return;
+  if (!name) return;
+
+  if (approvedNames.has(name) || !cityRule.allowWriteIns) {
+    countedTotals[name] = (countedTotals[name] || 0) + 1;
+    return;
+  }
+
+  if (!writeInGroupKey) return;
+
+  if (!writeInGroups[writeInGroupKey]) {
+    writeInGroups[writeInGroupKey] = {
+      count: 0,
+      labelCounts: {},
+    };
+  }
+
+  writeInGroups[writeInGroupKey].count += 1;
+  writeInGroups[writeInGroupKey].labelCounts[name] =
+    (writeInGroups[writeInGroupKey].labelCounts[name] || 0) + 1;
+}
+
+function finalizeLeaderboardAggregation(city, aggregation) {
+  const { approvedNames, cityRule, countedTotals, roster, writeInGroups } = aggregation;
+  const visibleWriteInTotals = {};
+  const writeInCountByNormalizedName = {};
+
+  for (const [writeInGroupKey, group] of Object.entries(writeInGroups)) {
+    writeInCountByNormalizedName[writeInGroupKey] = group.count;
+    if (group.count < WRITE_IN_LEADERBOARD_THRESHOLD) continue;
+
+    const displayName = pickWriteInDisplayName(group.labelCounts);
+    if (!displayName) continue;
+    visibleWriteInTotals[displayName] = group.count;
+  }
+
+  return {
+    city,
+    seeds: roster,
+    totals: {
+      ...buildVisibleTotals(cityRule, approvedNames, countedTotals),
+      ...visibleWriteInTotals,
+    },
+    threshold: COUNT_THRESHOLD,
+    writeInVisibilityThreshold: WRITE_IN_LEADERBOARD_THRESHOLD,
+    countedTotals,
+    writeInCountByNormalizedName,
+  };
+}
+
+function buildLeaderboardSnapshotFromVotes({ city, cityRule, roster, votes }) {
+  const aggregation = createLeaderboardAggregation(roster, cityRule);
+
+  for (const vote of votes || []) {
+    applyVoteToLeaderboardAggregation(aggregation, vote);
+  }
+
+  return finalizeLeaderboardAggregation(city, aggregation);
+}
+
 function toPublicSnapshot(snapshot) {
   const { countedTotals, writeInCountByNormalizedName, ...publicSnapshot } = snapshot || {};
   return publicSnapshot;
@@ -228,10 +310,7 @@ function toPublicSnapshot(snapshot) {
 async function getCityLeaderboardSnapshot(supabase, city) {
   const cityRule = getCityRule(city);
   const roster = await getCityRoster(supabase, city);
-  const { approvedNames } = buildRosterLookup(roster);
-
-  const countedTotals = {};
-  const writeInGroups = {};
+  const aggregation = createLeaderboardAggregation(roster, cityRule);
   const pageSize = 1000;
   let from = 0;
   const voteSelect = VOTE_STATUS_READ_ENABLED
@@ -256,64 +335,20 @@ async function getCityLeaderboardSnapshot(supabase, city) {
     if (voteErr) throw voteErr;
 
     for (const vote of votes || []) {
-      const name = (vote.canonical_band_name || vote.band_name || "").trim();
-      const normalizedName = (vote.normalized_band_name || normalize(name)).trim();
-      if (!isCountedVote(vote)) continue;
-      if (!name) continue;
-
-      if (approvedNames.has(name) || !cityRule.allowWriteIns) {
-        countedTotals[name] = (countedTotals[name] || 0) + 1;
-        continue;
-      }
-
-      if (!normalizedName) continue;
-
-      if (!writeInGroups[normalizedName]) {
-        writeInGroups[normalizedName] = {
-          count: 0,
-          labelCounts: {},
-        };
-      }
-
-      writeInGroups[normalizedName].count += 1;
-      writeInGroups[normalizedName].labelCounts[name] =
-        (writeInGroups[normalizedName].labelCounts[name] || 0) + 1;
+      applyVoteToLeaderboardAggregation(aggregation, vote);
     }
 
     if (!votes || votes.length < pageSize) break;
     from += pageSize;
   }
 
-  const visibleWriteInTotals = {};
-  const writeInCountByNormalizedName = {};
-
-  for (const [normalizedName, group] of Object.entries(writeInGroups)) {
-    writeInCountByNormalizedName[normalizedName] = group.count;
-    if (group.count < WRITE_IN_LEADERBOARD_THRESHOLD) continue;
-
-    const displayName = pickWriteInDisplayName(group.labelCounts);
-    if (!displayName) continue;
-    visibleWriteInTotals[displayName] = group.count;
-  }
-
-  return {
-    city,
-    seeds: roster,
-    totals: {
-      ...buildVisibleTotals(cityRule, approvedNames, countedTotals),
-      ...visibleWriteInTotals,
-    },
-    threshold: COUNT_THRESHOLD,
-    writeInVisibilityThreshold: WRITE_IN_LEADERBOARD_THRESHOLD,
-    countedTotals,
-    writeInCountByNormalizedName,
-  };
+  return finalizeLeaderboardAggregation(city, aggregation);
 }
 
 async function buildDuplicateVoteResponse(supabase, city, canonicalBandName) {
   try {
     const snapshot = await getCityLeaderboardSnapshot(supabase, city);
-    const normalizedBandName = normalize(canonicalBandName);
+    const normalizedBandName = getWriteInGroupKey(canonicalBandName);
     const count = snapshot.countedTotals?.[canonicalBandName]
       || snapshot.writeInCountByNormalizedName?.[normalizedBandName]
       || snapshot.totals[canonicalBandName]
@@ -526,7 +561,7 @@ exports.handler = async (event) => {
     try {
       const snapshot = await getCityLeaderboardSnapshot(supabase, city);
       const count = snapshot.countedTotals?.[canonicalBandName]
-        || snapshot.writeInCountByNormalizedName?.[normalize(canonicalBandName)]
+        || snapshot.writeInCountByNormalizedName?.[getWriteInGroupKey(canonicalBandName)]
         || snapshot.totals[canonicalBandName]
         || 0;
       const leaderboardEligible = Boolean(rosterBandName) || (
@@ -580,4 +615,9 @@ exports.handler = async (event) => {
   }
 
   return json(405, { error: "Method not allowed" });
+};
+
+exports.__test = {
+  buildLeaderboardSnapshotFromVotes,
+  getWriteInGroupKey,
 };
