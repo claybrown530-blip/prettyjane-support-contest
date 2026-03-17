@@ -33,19 +33,19 @@ const CITY_RULES = {
     closedMessage: "Voting is closed for Vancouver. You can still browse the leaderboard.",
   },
   "Seattle, WA": {
-    closed: false,
-    allowWriteIns: true,
-    closedMessage: "",
+    closed: true,
+    allowWriteIns: false,
+    closedMessage: "Voting is closed for Seattle. You can still browse the leaderboard.",
   },
   "San Francisco, CA": {
-    closed: false,
-    allowWriteIns: true,
-    closedMessage: "",
+    closed: true,
+    allowWriteIns: false,
+    closedMessage: "Voting is closed for San Francisco. You can still browse the leaderboard.",
   },
   "San Diego, CA": {
-    closed: false,
-    allowWriteIns: true,
-    closedMessage: "",
+    closed: true,
+    allowWriteIns: false,
+    closedMessage: "Voting is closed for San Diego. You can still browse the leaderboard.",
   },
 };
 

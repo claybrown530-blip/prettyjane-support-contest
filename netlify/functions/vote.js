@@ -36,16 +36,19 @@ const CITY_RULES = {
     closedMessage: "Vancouver voting is now closed.",
   },
   "Seattle, WA": {
-    closed: false,
-    allowWriteIns: true,
+    closed: true,
+    allowWriteIns: false,
+    closedMessage: "Seattle voting is now closed.",
   },
   "San Francisco, CA": {
-    closed: false,
-    allowWriteIns: true,
+    closed: true,
+    allowWriteIns: false,
+    closedMessage: "San Francisco voting is now closed.",
   },
   "San Diego, CA": {
-    closed: false,
-    allowWriteIns: true,
+    closed: true,
+    allowWriteIns: false,
+    closedMessage: "San Diego voting is now closed.",
   },
 };
 // Phase 2 rollout stays inert until these env flags are enabled after the migration.
