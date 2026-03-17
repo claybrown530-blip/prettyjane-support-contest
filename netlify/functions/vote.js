@@ -36,9 +36,8 @@ const CITY_RULES = {
     closedMessage: "Vancouver voting is now closed.",
   },
   "Seattle, WA": {
-    closed: true,
-    allowWriteIns: false,
-    closedMessage: "Seattle voting is now closed.",
+    closed: false,
+    allowWriteIns: true,
   },
   "San Francisco, CA": {
     closed: true,
