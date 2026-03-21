@@ -33,9 +33,9 @@ const CITY_RULES = {
     closedMessage: "Voting is closed for Vancouver. You can still browse the leaderboard.",
   },
   "Seattle, WA": {
-    closed: false,
+    closed: true,
     allowWriteIns: true,
-    closedMessage: "",
+    closedMessage: "Voting is closed for Seattle. You can still browse the leaderboard.",
   },
   "San Francisco, CA": {
     closed: true,

@@ -11,17 +11,17 @@ const CLOSED_CITIES = [
   "Santa Fe, NM",
   "Spokane, WA",
   "Vancouver, BC",
+  "Seattle, WA",
   "San Francisco, CA",
   "San Diego, CA",
 ];
-const OPEN_CITY = "Seattle, WA";
 const ALL_CITIES = [
   "OKC, OK",
   "Durango, CO",
   "Santa Fe, NM",
   "Spokane, WA",
   "Vancouver, BC",
-  OPEN_CITY,
+  "Seattle, WA",
   "San Francisco, CA",
   "San Diego, CA",
 ];
@@ -566,26 +566,6 @@ test("backend rejects submissions for every closed city", async (t) => {
   }
 });
 
-test("backend allows Seattle submissions", async () => {
-  process.env.SUPABASE_URL = "https://example.supabase.co";
-  process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-key";
-
-  const supabaseStub = createOpenVoteSupabaseStub(OPEN_CITY);
-  const { handler } = loadVoteModuleWithMockedSupabase(() => supabaseStub.client);
-  const response = await handler({
-    httpMethod: "POST",
-    body: JSON.stringify(buildPayload(OPEN_CITY)),
-  });
-  const body = JSON.parse(response.body);
-
-  assert.equal(response.statusCode, 200);
-  assert.equal(body.ok, true);
-  assert.equal(body.city, OPEN_CITY);
-  assert.equal(supabaseStub.insertedVotes.length, 1);
-  assert.equal(supabaseStub.insertedVotes[0].city, OPEN_CITY);
-  assert.equal(supabaseStub.insertedVotes[0].is_valid_vote, true);
-});
-
 test("frontend shows closed state for every closed city while still rendering the leaderboard", async (t) => {
   FakeChart.instances.length = 0;
   const harness = createFrontendHarness();
@@ -613,26 +593,4 @@ test("frontend shows closed state for every closed city while still rendering th
       assert.ok(FakeChart.instances[0].data.labels.length >= 1);
     });
   }
-});
-
-test("frontend keeps Seattle open while still rendering the leaderboard", async () => {
-  FakeChart.instances.length = 0;
-  const harness = createFrontendHarness();
-  const appSource = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8");
-
-  vm.runInContext(appSource, harness.context, { filename: "app.js" });
-  harness.context.setCity(OPEN_CITY);
-  await flushAsyncWork();
-
-  assert.equal(harness.elements.citySelect.value, OPEN_CITY);
-  assert.equal(harness.elements.citySelectBoard.value, OPEN_CITY);
-  assert.equal(harness.elements.cityClosedMsg.classList.contains("hidden"), true);
-  assert.equal(harness.elements.bandNameWrap.classList.contains("hidden"), false);
-  assert.equal(harness.elements.bandNameInput.disabled, false);
-  assert.equal(harness.elements.submitButton.disabled, false);
-  assert.equal(harness.elements.bandNameInput.placeholder, "Type a band name…");
-  assert.equal(harness.elements.okcBandPicker.classList.contains("hidden"), true);
-  assert.equal(harness.elements.topList.children.length, 1);
-  assert.match(harness.elements.topList.children[0].innerHTML, /Leader/);
-  assert.ok(FakeChart.instances[0].data.labels.length >= 1);
 });
